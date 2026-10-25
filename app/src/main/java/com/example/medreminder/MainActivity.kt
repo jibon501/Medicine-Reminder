@@ -70,7 +70,6 @@ private val TABS = listOf(
     "📅" to "আজ",
     "💊" to "ওষুধ",
     "🩺" to "রোগ",
-    "📜" to "ইতিহাস",
     "⚙️" to "সেটিংস"
 )
 
@@ -193,7 +192,6 @@ fun AppRoot() {
                                 onEdit = { editDisease = it },
                                 onAddMed = { editMed = newMedicine(it.id); tab = 1 }
                             )
-                            3 -> HistoryScreen()
                             else -> SettingsScreen()
                         }
                     }

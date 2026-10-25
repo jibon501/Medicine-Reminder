@@ -449,13 +449,6 @@ fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
                 }
             }
         }
-        if (Suggest.excelCount == 0) {
-            Text(
-                "ওষুধের নাম ও পাওয়ারের Excel তালিকা এখনও দেওয়া হয়নি। সেটিংস থেকে তালিকা ইমপোর্ট করুন।",
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
-
         NumField("প্রতিবারে কত " + f.unit + "?", dose) { dose = it }
 
         Text("কখন? (খাবারের আগে / পরে)", style = MaterialTheme.typography.titleMedium)
@@ -574,7 +567,6 @@ fun DiseasesScreen(onNew: () -> Unit, onEdit: (Disease) -> Unit, onAddMed: (Dise
     val d = Store.data
     var listFor by remember { mutableStateOf<Disease?>(null) }
     listFor?.let { PurchaseListDialog(it) { listFor = null } }
-    val export = rememberDiseaseExporter()
     Column(Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -603,7 +595,13 @@ fun DiseasesScreen(onNew: () -> Unit, onEdit: (Disease) -> Unit, onAddMed: (Dise
                 val meds = d.medicines.filter { it.diseaseId == ds.id }
                 Card(onClick = { onEdit(ds) }, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(ds.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            ds.name,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                         Text("তারিখ: " + prettyDate(ds.date))
                         Text("প্রেসক্রিপশনের ছবি: " + bn(ds.images.size) + "টি")
                         if (meds.isNotEmpty()) {
@@ -612,7 +610,6 @@ fun DiseasesScreen(onNew: () -> Unit, onEdit: (Disease) -> Unit, onAddMed: (Dise
                         FlowRow {
                             TextButton(onClick = { onAddMed(ds) }) { Text("+ এই রোগে ওষুধ যোগ") }
                             TextButton(onClick = { listFor = ds }) { Text("🛒 কেনার তালিকা") }
-                            TextButton(onClick = { export(ds) }) { Text("📤 এক্সপোর্ট") }
                         }
                     }
                 }
@@ -636,7 +633,6 @@ fun DiseaseEditor(init: Disease, onClose: () -> Unit) {
     var confirmDelete by remember { mutableStateOf(false) }
     var showList by remember { mutableStateOf(false) }
     if (showList) PurchaseListDialog(init) { showList = false }
-    val export = rememberDiseaseExporter()
 
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         if (uri != null) {
@@ -711,9 +707,6 @@ fun DiseaseEditor(init: Disease, onClose: () -> Unit) {
             val cnt = Store.data.medicines.count { it.diseaseId == init.id }
             OutlinedButton(onClick = { showList = true }, modifier = Modifier.fillMaxWidth()) {
                 Text("🛒 কেনার তালিকা ছবি করুন (" + bn(cnt) + "টি ওষুধ)")
-            }
-            OutlinedButton(onClick = { export(init) }, modifier = Modifier.fillMaxWidth()) {
-                Text("📤 রোগ এক্সপোর্ট (ওষুধের ডিটেলস সহ)")
             }
         }
 
@@ -946,18 +939,6 @@ fun SettingsScreen() {
             if (exportZip(ctx, uri)) toast(ctx, "ব্যাকআপ সেভ হয়েছে") else toast(ctx, "ব্যাকআপ করা যায়নি")
         }
     }
-    var excelCnt by remember { mutableStateOf(Suggest.excelCount) }
-    LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) { Suggest.loadExcel(ctx) }
-        excelCnt = Suggest.excelCount
-    }
-    val excelPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        if (uri != null) {
-            val n = Suggest.importExcel(ctx, uri)
-            if (n > 0) excelCnt = n
-            if (n > 0) toast(ctx, bn(n) + "টি ওষুধ পাওয়া গেছে") else toast(ctx, "ফাইল পড়া যায়নি। .xlsx বা .csv ফাইল দিন")
-        }
-    }
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
             if (importZip(ctx, uri)) toast(ctx, "রিস্টোর সম্পন্ন") else toast(ctx, "রিস্টোর করা যায়নি")
@@ -982,62 +963,63 @@ fun SettingsScreen() {
             }
         }
 
-        Text("খাবারের সময়", style = MaterialTheme.typography.titleMedium)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("সকালের খাবার", modifier = Modifier.weight(1f))
-            OutlinedButton(onClick = {
-                pickTime(ctx, d.morning) { t ->
-                    Store.update(ctx) { it.copy(morning = t) }
-                    Reminders.scheduleAll(ctx)
-                }
-            }) { Text(pretty(d.morning)) }
+        var showMeals by remember { mutableStateOf(false) }
+        OutlinedButton(onClick = { showMeals = true }, modifier = Modifier.fillMaxWidth()) {
+            Text("🍽 খাবারের সময়")
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("দুপুরের খাবার", modifier = Modifier.weight(1f))
-            OutlinedButton(onClick = {
-                pickTime(ctx, d.noon) { t ->
-                    Store.update(ctx) { it.copy(noon = t) }
-                    Reminders.scheduleAll(ctx)
-                }
-            }) { Text(pretty(d.noon)) }
+        if (showMeals) {
+            AlertDialog(
+                onDismissRequest = { showMeals = false },
+                title = { Text("খাবারের সময়") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("সকালের খাবার", modifier = Modifier.weight(1f))
+                            OutlinedButton(onClick = {
+                                pickTime(ctx, d.morning) { t ->
+                                    Store.update(ctx) { it.copy(morning = t) }
+                                    Reminders.scheduleAll(ctx)
+                                }
+                            }) { Text(pretty(d.morning)) }
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("দুপুরের খাবার", modifier = Modifier.weight(1f))
+                            OutlinedButton(onClick = {
+                                pickTime(ctx, d.noon) { t ->
+                                    Store.update(ctx) { it.copy(noon = t) }
+                                    Reminders.scheduleAll(ctx)
+                                }
+                            }) { Text(pretty(d.noon)) }
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("রাতের খাবার", modifier = Modifier.weight(1f))
+                            OutlinedButton(onClick = {
+                                pickTime(ctx, d.night) { t ->
+                                    Store.update(ctx) { it.copy(night = t) }
+                                    Reminders.scheduleAll(ctx)
+                                }
+                            }) { Text(pretty(d.night)) }
+                        }
+                        Text(
+                            "\"খাবারের আগের\" ওষুধের নোটিফিকেশন খাবারের সময়ের " + bn(Reminders.BEFORE_LEAD) +
+                                " মিনিট আগে আসবে। না খেলে প্রতি " + bn(Reminders.NAG_MINUTES) +
+                                " মিনিট পর পর আবার মনে করানো হবে।",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                },
+                confirmButton = { TextButton(onClick = { showMeals = false }) { Text("বন্ধ") } }
+            )
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("রাতের খাবার", modifier = Modifier.weight(1f))
-            OutlinedButton(onClick = {
-                pickTime(ctx, d.night) { t ->
-                    Store.update(ctx) { it.copy(night = t) }
-                    Reminders.scheduleAll(ctx)
-                }
-            }) { Text(pretty(d.night)) }
-        }
-        Text(
-            "\"খাবারের আগের\" ওষুধের নোটিফিকেশন খাবারের সময়ের " + bn(Reminders.BEFORE_LEAD) +
-                " মিনিট আগে আসবে। না খেলে প্রতি " + bn(Reminders.NAG_MINUTES) + " মিনিট পর পর আবার মনে করানো হবে।"
-        )
 
-        Text("ওষুধের নামের তালিকা", style = MaterialTheme.typography.titleMedium)
-        Text(
-            if (excelCnt > 0) "তালিকায় " + bn(excelCnt) + "টি ওষুধ আছে (নাম + পাওয়ার)"
-            else "এখনও কোনো তালিকা দেওয়া হয়নি। Excel ফাইলের প্রথম কলামে ওষুধের নাম, দ্বিতীয় কলামে পাওয়ার থাকবে।"
-        )
-        OutlinedButton(
-            onClick = { excelPicker.launch(arrayOf("*/*")) },
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("📊 Excel থেকে ওষুধের তালিকা নিন") }
-
-        Text("ব্যাকআপ", style = MaterialTheme.typography.titleMedium)
-        Text(
-            if (d.lastBackup.isBlank()) "সর্বশেষ ব্যাকআপ: এখনও হয়নি"
-            else "সর্বশেষ ব্যাকআপ: " + prettyDate(d.lastBackup)
-        )
         Button(
             onClick = { exporter.launch("medicine-backup-" + LocalDate.now().toString() + ".zip") },
             modifier = Modifier.fillMaxWidth()
-        ) { Text("☁️ ব্যাকআপ নিন") }
+        ) { Text("☁️ ব্যাকআপ") }
         OutlinedButton(
             onClick = { importer.launch(arrayOf("*/*")) },
             modifier = Modifier.fillMaxWidth()
-        ) { Text("📥 ব্যাকআপ থেকে রিস্টোর করুন") }
+        ) { Text("📥 রিস্টোর") }
 
         var showHelp by remember { mutableStateOf(false) }
         OutlinedButton(onClick = { showHelp = true }, modifier = Modifier.fillMaxWidth()) {
@@ -1079,10 +1061,13 @@ fun SettingsScreen() {
                 title = { Text("ওষুধের রিমাইন্ডার") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("ভার্শন: ২৫-১০-২৬_০৫")
-                        Text("ডেভেলপার: জাহাঙ্গীর আলম (AI এর সহায়তায়)")
+                        Text("ভার্শন: ২৫-১০-২৬_০৬")
+                        Column {
+                            Text("ডেভেলপার: জাহাঙ্গীর আলম (AI এর সহায়তায়)")
+                            Text("চরিতাবাড়ী, আদিতমারী, লালমনিরহাট")
+                        }
                         Text(
-                            "📞 মোবাইল: ০১৭৬৭০৮০৬৬৬ (ট্যাপ করলে কল)",
+                            "📞 মোবাইল: ০১৭৬৭০৮০৬৬৬",
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.clickable {
