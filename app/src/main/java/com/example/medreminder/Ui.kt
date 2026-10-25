@@ -32,6 +32,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -262,14 +264,10 @@ fun MedsScreen(onNew: () -> Unit, onEdit: (Medicine) -> Unit) {
                         }
                         if (isOpen) {
                             if (m.muted) Text("🔕 সাইলেন্ট: এর জন্য কোনো নোটিফিকেশন আসবে না", color = Color(0xFFC62828))
+                            Text("শুরু: " + prettyDate(m.startDate))
                             Text("প্রতিবারে: " + m.doseLabel() + " · দিনে " + bn(m.timings.size) + " বার")
                             if (m.intervalDays > 1) {
                                 Text("প্রতি " + bn(m.intervalDays) + " দিন পর পর")
-                            }
-                            if (m.courseDays > 0) {
-                                Text("কোর্স: " + bn(m.courseDays) + " দিন → মোট লাগবে " + m.totalLabel(), fontWeight = FontWeight.Medium)
-                            } else {
-                                Text("কোর্স: চলমান")
                             }
                             Text(m.timings.joinToString("\n") { "• " + Slots.label(it) })
                             if (disease != null) Text("রোগ: " + disease.name)
@@ -312,7 +310,6 @@ fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
     var diseaseId by remember { mutableStateOf(init.diseaseId) }
     var timings by remember { mutableStateOf(init.timings) }
     var start by remember { mutableStateOf(init.startDate) }
-    var course by remember { mutableStateOf(if (init.courseDays > 0) init.courseDays.toString() else "") }
     var interval by remember { mutableStateOf(init.intervalDays.toString()) }
     var muted by remember { mutableStateOf(init.muted) }
     var menu by remember { mutableStateOf(false) }
@@ -326,7 +323,7 @@ fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
     val preview = init.copy(
         dose = (dose.toIntOrNull() ?: 1).coerceAtLeast(1),
         timings = timings,
-        courseDays = course.toIntOrNull() ?: 0,
+        courseDays = 0,
         intervalDays = (interval.toIntOrNull() ?: 1).coerceAtLeast(1)
     )
 
@@ -337,11 +334,6 @@ fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
         }
         if (timings.isEmpty()) {
             toast(ctx, "কখন নেবেন তা অন্তত একটি বাছাই করুন")
-            return
-        }
-        val days = course.toIntOrNull() ?: 0
-        if (days <= 0) {
-            toast(ctx, "কোর্স কত দিনের তা দিন")
             return
         }
         val m = preview.copy(
@@ -378,9 +370,10 @@ fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
         val mine = d.medicines.map { it.name }
 
         LaunchedEffect(Unit) {
-            withContext(Dispatchers.IO) { Suggest.loadCache(ctx) }
+            withContext(Dispatchers.IO) { Suggest.loadExcel(ctx); Suggest.loadCache(ctx) }
             listVersion++
-            val updated = withContext(Dispatchers.IO) { Suggest.refreshIfNeeded(ctx) }
+            val updated = if (Suggest.excelCount > 0) false
+            else withContext(Dispatchers.IO) { Suggest.refreshIfNeeded(ctx) }
             if (updated) listVersion++
         }
         LaunchedEffect(name, listVersion) {
@@ -407,10 +400,33 @@ fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
             }
         }
 
+        Box {
+            OutlinedButton(onClick = { menu = true }, modifier = Modifier.fillMaxWidth()) {
+                Text("রোগ: " + (d.diseases.firstOrNull { it.id == diseaseId }?.name ?: "বাছাই করুন (ঐচ্ছিক)"))
+            }
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                DropdownMenuItem(
+                    text = { Text("কোনো রোগ নয়") },
+                    onClick = { diseaseId = ""; menu = false }
+                )
+                d.diseases.forEach { ds ->
+                    DropdownMenuItem(
+                        text = { Text(ds.name) },
+                        onClick = { diseaseId = ds.id; menu = false }
+                    )
+                }
+            }
+        }
+
+        OutlinedButton(
+            onClick = { pickDate(ctx, start) { start = it } },
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("শুরুর তারিখ: " + prettyDate(start)) }
+
         OutlinedTextField(
             value = name,
             onValueChange = { name = it },
-            label = { Text("নাম (টাইপ করলে সাজেশন আসবে)") },
+            label = { Text("নাম ও পাওয়ার (টাইপ করলে সাজেশন আসবে)") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
@@ -433,9 +449,9 @@ fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
                 }
             }
         }
-        if (Suggest.onlineCount == 0) {
+        if (Suggest.excelCount == 0) {
             Text(
-                "অনলাইন ওষুধের তালিকা এখনও নামেনি। ইন্টারনেট চালু রেখে এই পাতা একবার খুললে নামবে, তারপর অফলাইনেও সাজেশন চলবে।",
+                "ওষুধের নাম ও পাওয়ারের Excel তালিকা এখনও দেওয়া হয়নি। সেটিংস থেকে তালিকা ইমপোর্ট করুন।",
                 style = MaterialTheme.typography.bodySmall
             )
         }
@@ -459,43 +475,6 @@ fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
         }
 
         NumField("কত দিন পর পর? (১ = প্রতিদিন, ২ = একদিন পর পর, ৩ = দুই দিন পর পর)", interval) { interval = it }
-        NumField("কোর্স কত দিনের?", course) { course = it }
-
-        if (preview.courseDays > 0 && timings.isNotEmpty()) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("📦 মোট লাগবে: " + preview.totalLabel(), fontWeight = FontWeight.Bold)
-                    Text(
-                        bn(preview.doseDays()) + " দিন নেওয়া × দিনে " + bn(timings.size) + " বার × প্রতিবারে " +
-                            preview.doseLabel(),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-        }
-
-        Box {
-            OutlinedButton(onClick = { menu = true }, modifier = Modifier.fillMaxWidth()) {
-                Text("রোগ: " + (d.diseases.firstOrNull { it.id == diseaseId }?.name ?: "বাছাই করুন (ঐচ্ছিক)"))
-            }
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                DropdownMenuItem(
-                    text = { Text("কোনো রোগ নয়") },
-                    onClick = { diseaseId = ""; menu = false }
-                )
-                d.diseases.forEach { ds ->
-                    DropdownMenuItem(
-                        text = { Text(ds.name) },
-                        onClick = { diseaseId = ds.id; menu = false }
-                    )
-                }
-            }
-        }
-
-        OutlinedButton(
-            onClick = { pickDate(ctx, start) { start = it } },
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("শুরুর তারিখ: " + prettyDate(start)) }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("🔕 সাইলেন্ট (নোটিফিকেশন লাগবে না)", modifier = Modifier.weight(1f))
@@ -602,6 +581,21 @@ fun DiseasesScreen(onNew: () -> Unit, onEdit: (Disease) -> Unit, onAddMed: (Dise
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        "\"আর যখন আমি অসুস্থ হই, তখন তিনিই(আল্লাহ) আমাকে আরোগ্য করেন।\"",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.fillMaxWidth().padding(16.dp)
+                    )
+                }
+            }
             if (d.diseases.isEmpty()) {
                 item { Text("এখনও কোনো রোগ নেই।", modifier = Modifier.padding(top = 8.dp)) }
             }
@@ -952,6 +946,18 @@ fun SettingsScreen() {
             if (exportZip(ctx, uri)) toast(ctx, "ব্যাকআপ সেভ হয়েছে") else toast(ctx, "ব্যাকআপ করা যায়নি")
         }
     }
+    var excelCnt by remember { mutableStateOf(Suggest.excelCount) }
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) { Suggest.loadExcel(ctx) }
+        excelCnt = Suggest.excelCount
+    }
+    val excelPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) {
+            val n = Suggest.importExcel(ctx, uri)
+            if (n > 0) excelCnt = n
+            if (n > 0) toast(ctx, bn(n) + "টি ওষুধ পাওয়া গেছে") else toast(ctx, "ফাইল পড়া যায়নি। .xlsx বা .csv ফাইল দিন")
+        }
+    }
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
             if (importZip(ctx, uri)) toast(ctx, "রিস্টোর সম্পন্ন") else toast(ctx, "রিস্টোর করা যায়নি")
@@ -1009,6 +1015,16 @@ fun SettingsScreen() {
                 " মিনিট আগে আসবে। না খেলে প্রতি " + bn(Reminders.NAG_MINUTES) + " মিনিট পর পর আবার মনে করানো হবে।"
         )
 
+        Text("ওষুধের নামের তালিকা", style = MaterialTheme.typography.titleMedium)
+        Text(
+            if (excelCnt > 0) "তালিকায় " + bn(excelCnt) + "টি ওষুধ আছে (নাম + পাওয়ার)"
+            else "এখনও কোনো তালিকা দেওয়া হয়নি। Excel ফাইলের প্রথম কলামে ওষুধের নাম, দ্বিতীয় কলামে পাওয়ার থাকবে।"
+        )
+        OutlinedButton(
+            onClick = { excelPicker.launch(arrayOf("*/*")) },
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("📊 Excel থেকে ওষুধের তালিকা নিন") }
+
         Text("ব্যাকআপ", style = MaterialTheme.typography.titleMedium)
         Text(
             if (d.lastBackup.isBlank()) "সর্বশেষ ব্যাকআপ: এখনও হয়নি"
@@ -1063,7 +1079,7 @@ fun SettingsScreen() {
                 title = { Text("ওষুধের রিমাইন্ডার") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("ভার্শন: ২৫-১০-২৬_০৪")
+                        Text("ভার্শন: ২৫-১০-২৬_০৫")
                         Text("ডেভেলপার: জাহাঙ্গীর আলম (AI এর সহায়তায়)")
                         Text(
                             "📞 মোবাইল: ০১৭৬৭০৮০৬৬৬ (ট্যাপ করলে কল)",

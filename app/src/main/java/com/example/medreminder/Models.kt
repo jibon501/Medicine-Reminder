@@ -68,7 +68,7 @@ data class Medicine(
                 diseaseId = o.optString("diseaseId", ""),
                 timings = times,
                 startDate = o.optString("startDate", ""),
-                courseDays = o.optInt("courseDays", 0),
+                courseDays = 0, // কোর্সের দিন আর ব্যবহার হয় না, ওষুধ চলমান ধরা হয়
                 form = o.optString("form", "TABLET"),
                 intervalDays = o.optInt("intervalDays", 1).coerceAtLeast(1),
                 muted = o.optBoolean("muted", false)

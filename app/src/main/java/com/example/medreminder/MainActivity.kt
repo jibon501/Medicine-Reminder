@@ -8,7 +8,17 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -111,9 +121,42 @@ fun AppRoot() {
         lightColorScheme(primary = Color(0xFF00796B))
     }
 
+    // অ্যাপ খোলার সময় ৫ সেকেন্ড আয়াত দেখানো হয়
+    var splash by rememberSaveable { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        delay(5000)
+        splash = false
+    }
+
     MaterialTheme(colorScheme = scheme) {
         Surface(modifier = Modifier.fillMaxSize()) {
-            if (em != null) {
+            if (splash) {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(28.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "وَاِذَا مَرِضۡتُ فَهُوَ يَشۡفِيۡنِ",
+                        fontSize = 30.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.height(20.dp))
+                    Text(
+                        "ওয়া ইযা মারিদতু ফাহুওয়া ইয়াশফীন",
+                        fontSize = 18.sp,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        "\"আর যখন আমি অসুস্থ হই, তখন তিনিই(আল্লাহ) আমাকে আরোগ্য করেন।\" (আশ-শুআরা আয়াত ৮০)।",
+                        fontSize = 17.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            } else if (em != null) {
                 BackHandler { editMed = null }
                 MedicineEditor(em) { editMed = null }
             } else if (ed != null) {

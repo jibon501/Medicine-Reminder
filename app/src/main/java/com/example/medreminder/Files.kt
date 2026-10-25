@@ -153,11 +153,6 @@ fun diseaseText(ds: Disease, meds: List<Medicine>): String = buildString {
             .append("\n")
         if (m.intervalDays > 1) append("   প্রতি ").append(bn(m.intervalDays)).append(" দিন পর পর\n")
         append("   শুরুর তারিখ: ").append(prettyDate(m.startDate)).append("\n")
-        if (m.courseDays > 0) {
-            append("   কোর্স: ").append(bn(m.courseDays)).append(" দিন · মোট লাগবে ").append(m.totalLabel()).append("\n")
-        } else {
-            append("   কোর্স: চলমান\n")
-        }
         append("\n")
     }
 }
