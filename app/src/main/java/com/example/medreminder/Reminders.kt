@@ -1,0 +1,331 @@
+package com.example.medreminder
+
+import android.Manifest
+import android.app.AlarmManager
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.media.AudioAttributes
+import android.media.RingtoneManager
+import android.os.Build
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
+
+object Reminders {
+    const val CHANNEL = "meds_alarm"
+    const val NAG_MINUTES = 10
+    const val NAG_MAX = 6
+
+    // খাবারের আগের ওষুধের নোটিফিকেশন খাবারের সময়ের এত মিনিট আগে আসে
+    const val BEFORE_LEAD = 30
+    private const val FLAGS = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+
+    // ---------- helpers ----------
+
+    fun allSlotKeys(d: AppData): List<String> = d.medicines.flatMap { it.timings }.distinct()
+
+    // সাইলেন্ট করা ওষুধ কোথাও আসবে না (নোটিফিকেশন, আজকের তালিকা)
+    fun medsFor(d: AppData, key: String, date: LocalDate): List<Medicine> =
+        d.medicines.filter { !it.muted && it.timings.contains(key) && it.inCourseOn(date) }
+
+    fun medsDue(d: AppData, key: String, date: LocalDate): List<Medicine> = medsFor(d, key, date)
+
+    fun hasBeforeMeds(d: AppData, key: String, date: LocalDate): Boolean =
+        medsFor(d, Slots.mealOf(key) + "_BEFORE", date).isNotEmpty()
+
+    // এই স্লটের নোটিফিকেশন ও "খেয়েছি" বাটন যত মিনিটে (মধ্যরাত থেকে) চালু হয়
+    // আগে: খাবারের সময় - BEFORE_LEAD মিনিট, পরে: খাবারের সময়
+    fun activeFromMinutes(d: AppData, key: String): Int {
+        val meal = toMin(Slots.mealTime(d, Slots.mealOf(key)))
+        return if (Slots.isBefore(key)) (meal - BEFORE_LEAD).coerceAtLeast(0) else meal
+    }
+
+    fun alarmMinutes(d: AppData, key: String): Int = activeFromMinutes(d, key)
+
+    fun displayMinutes(d: AppData, key: String): Int = activeFromMinutes(d, key)
+
+    fun mealHHmm(d: AppData, key: String): String = Slots.mealTime(d, Slots.mealOf(key))
+
+    // "খেয়েছি" বাটন এখন চাপা যাবে কিনা (সময় হয়েছে কিনা)
+    fun isActive(d: AppData, key: String, date: LocalDate, now: LocalDateTime = LocalDateTime.now()): Boolean {
+        if (date.isBefore(now.toLocalDate())) return true
+        if (date.isAfter(now.toLocalDate())) return false
+        return now.hour * 60 + now.minute >= activeFromMinutes(d, key)
+    }
+
+    // দিনের ক্রম: সকাল আগে → সকাল পরে → দুপুর আগে → দুপুর পরে → রাত আগে → রাত পরে
+    val slotOrder: List<String> = Slots.meals.flatMap { listOf(it + "_BEFORE", it + "_AFTER") }
+
+    // এই দিনে এই স্লটের ঠিক আগের যে স্লটে ওষুধ আছে (ক্রমে চলার জন্য)
+    fun prevSlot(d: AppData, key: String, date: LocalDate): String? {
+        val idx = slotOrder.indexOf(key)
+        for (i in idx - 1 downTo 0) {
+            if (medsFor(d, slotOrder[i], date).isNotEmpty()) return slotOrder[i]
+        }
+        return null
+    }
+
+    // পরের স্লট (যেটায় ওষুধ আছে)
+    fun nextSlot(d: AppData, key: String, date: LocalDate): String? {
+        val idx = slotOrder.indexOf(key)
+        for (i in idx + 1 until slotOrder.size) {
+            if (medsFor(d, slotOrder[i], date).isNotEmpty()) return slotOrder[i]
+        }
+        return null
+    }
+
+    // আগের স্লটের ওষুধ খাওয়া না হলে এটা আটকে থাকে। আগেরটা "খেয়েছি" দিলেই এটা চালু হয়
+    fun afterBlocked(d: AppData, key: String, dateStr: String): Boolean {
+        val date = LocalDate.parse(dateStr)
+        val prev = prevSlot(d, key, date) ?: return false
+        return !d.taken.contains("$dateStr|$prev")
+    }
+
+    // বাটন চাপা যাবে কিনা: শুধু ক্রম মানলেই হবে, সময়ের শর্ত নেই
+    fun canTake(d: AppData, key: String, dateStr: String): Boolean = !afterBlocked(d, key, dateStr)
+
+    fun slotVerbs(meds: List<Medicine>): String =
+        meds.map { Forms.of(it.form).verb }.distinct().joinToString(" / ")
+
+    private fun eatOnly(meds: List<Medicine>): Boolean =
+        meds.all { Forms.of(it.form).id == "TABLET" || Forms.of(it.form).id == "SYRUP" }
+
+    fun takenButtonLabel(meds: List<Medicine>): String =
+        if (eatOnly(meds)) "✅ খেয়েছি" else "✅ নিয়েছি"
+
+    // একটাই বাটন: খাওয়া হলে ওপরে "খাওয়া হয়েছে", নিচে "খাইনি" (বাটনে চাপলে আবার না-খাওয়া হয়ে যায়)
+    fun doneTitle(meds: List<Medicine>): String =
+        if (eatOnly(meds)) "✅ খাওয়া হয়েছে" else "✅ নেওয়া হয়েছে"
+
+    fun undoTitle(meds: List<Medicine>): String =
+        if (eatOnly(meds)) "↩️ খাইনি" else "↩️ নিইনি"
+
+    fun numberedLines(meds: List<Medicine>): List<String> =
+        meds.mapIndexed { i, m ->
+            bn(i + 1) + ". " + m.name + " — " + m.doseLabel()
+        }
+
+    private fun notifId(key: String): Int = (key.hashCode() and 0x7fffffff) % 100000 + 10
+
+    private fun alarmPi(ctx: Context, key: String, nag: Int, date: String): PendingIntent {
+        val i = Intent(ctx, AlarmReceiver::class.java)
+        i.putExtra("key", key)
+        i.putExtra("nag", nag)
+        i.putExtra("date", date)
+        val code = ((if (nag == 0) "M" else "N") + key).hashCode()
+        return PendingIntent.getBroadcast(ctx, code, i, FLAGS)
+    }
+
+    private fun setAlarm(ctx: Context, at: Long, pi: PendingIntent) {
+        val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        try {
+            val exact = Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms()
+            if (exact) {
+                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+            } else {
+                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+            }
+        } catch (e: SecurityException) {
+            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+        }
+    }
+
+    private fun canNotify(ctx: Context): Boolean =
+        Build.VERSION.SDK_INT < 33 ||
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun notifyNow(ctx: Context, id: Int, n: android.app.Notification) {
+        if (!canNotify(ctx)) return
+        try {
+            NotificationManagerCompat.from(ctx).notify(id, n)
+        } catch (e: SecurityException) {
+            // permission missing, nothing to do
+        }
+    }
+
+    fun ensureChannel(ctx: Context) {
+        val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (nm.getNotificationChannel(CHANNEL) != null) return
+        val ch = NotificationChannel(CHANNEL, "ওষুধের রিমাইন্ডার", NotificationManager.IMPORTANCE_HIGH)
+        ch.enableVibration(true)
+        ch.vibrationPattern = longArrayOf(0, 500, 300, 500)
+        val attrs = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ALARM)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+        ch.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM), attrs)
+        nm.createNotificationChannel(ch)
+    }
+
+    // ---------- scheduling ----------
+
+    fun scheduleAll(ctx: Context) {
+        Store.ensureLoaded(ctx)
+        val d = Store.data
+        val now = LocalDateTime.now()
+        for (key in allSlotKeys(d)) {
+            val m = alarmMinutes(d, key)
+            var at = LocalDate.now().atStartOfDay().plusMinutes(m.toLong())
+            while (!at.isAfter(now)) at = at.plusDays(1)
+            val millis = at.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            setAlarm(ctx, millis, alarmPi(ctx, key, 0, ""))
+        }
+    }
+
+    fun cancelNag(ctx: Context, key: String) {
+        val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        am.cancel(alarmPi(ctx, key, 1, ""))
+    }
+
+    private fun cancelNotif(ctx: Context, key: String) {
+        NotificationManagerCompat.from(ctx).cancel(notifId(key))
+    }
+
+    // ---------- firing ----------
+
+    fun fire(ctx: Context, key: String, dateStr: String, nag: Int) {
+        val d = Store.data
+        val date = LocalDate.parse(dateStr)
+        if (d.taken.contains("$dateStr|$key")) return
+        val meds = medsDue(d, key, date)
+        if (meds.isEmpty()) return
+        val prev = prevSlot(d, key, date)
+        val blocked = prev != null && !d.taken.contains("$dateStr|$prev")
+        // একই বেলার আগের ওষুধ না খেলে পরের ওষুধের নোটিফিকেশন আসবে না
+        if (blocked && Slots.mealOf(prev!!) == Slots.mealOf(key)) return
+
+        // আগের বেলার ওষুধ বাকি থাকলে শুধু জানানো হয়, বাটন ছাড়া
+        showNotification(ctx, key, dateStr, meds, nag, blocked)
+        if (!blocked && nag < NAG_MAX) {
+            val at = System.currentTimeMillis() + NAG_MINUTES * 60_000L
+            setAlarm(ctx, at, alarmPi(ctx, key, nag + 1, dateStr))
+        }
+    }
+
+    private fun showNotification(
+        ctx: Context,
+        key: String,
+        dateStr: String,
+        meds: List<Medicine>,
+        nag: Int,
+        locked: Boolean
+    ) {
+        ensureChannel(ctx)
+        val title = Slots.label(key)
+        val lines = numberedLines(meds)
+        val body = if (locked) {
+            lines.joinToString("\n") + "\n\n⏳ আগের ওষুধ আগে নিন, তারপর অ্যাপে গিয়ে \"খেয়েছি\" চাপুন"
+        } else {
+            lines.joinToString("\n")
+        }
+        val open = PendingIntent.getActivity(ctx, 0, Intent(ctx, MainActivity::class.java), FLAGS)
+        val b = NotificationCompat.Builder(ctx, CHANNEL)
+            .setSmallIcon(R.drawable.ic_pill)
+            .setContentTitle(if (nag > 0) "$title (আবার মনে করিয়ে দিচ্ছি)" else title)
+            .setContentText(lines.joinToString("  "))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setAutoCancel(false)
+            .setContentIntent(open)
+        if (!locked) {
+            val takeIntent = Intent(ctx, TakenReceiver::class.java)
+            takeIntent.putExtra("key", key)
+            takeIntent.putExtra("date", dateStr)
+            val takePi = PendingIntent.getBroadcast(ctx, ("T" + key).hashCode(), takeIntent, FLAGS)
+            b.addAction(0, takenButtonLabel(meds), takePi)
+        }
+        notifyNow(ctx, notifId(key), b.build())
+    }
+
+    fun testNotification(ctx: Context) {
+        ensureChannel(ctx)
+        val n = NotificationCompat.Builder(ctx, CHANNEL)
+            .setSmallIcon(R.drawable.ic_pill)
+            .setContentTitle("টেস্ট নোটিফিকেশন")
+            .setContentText("এভাবেই ওষুধের রিমাইন্ডার আসবে")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setAutoCancel(true)
+            .build()
+        notifyNow(ctx, 99, n)
+    }
+
+    // ---------- taken ----------
+
+    // সফল হলে true। সময় না হলে বা আগের ওষুধ বাকি থাকলে false
+    fun markTaken(ctx: Context, key: String, dateStr: String): Boolean {
+        Store.ensureLoaded(ctx)
+        val before = Store.data
+        val evKey = "$dateStr|$key"
+        if (before.taken.contains(evKey)) {
+            cancelNotif(ctx, key)
+            return true
+        }
+        if (!canTake(before, key, dateStr)) return false
+
+        val date = LocalDate.parse(dateStr)
+        val meds = medsDue(before, key, date)
+        val now = System.currentTimeMillis()
+        val logs = meds.map { LogEntry(now, it.name, key, it.dose, it.id) }
+
+        Store.update(ctx) { s ->
+            s.copy(
+                log = (s.log + logs).takeLast(3000),
+                taken = (s.taken + evKey).takeLast(200)
+            )
+        }
+
+        cancelNotif(ctx, key)
+        cancelNag(ctx, key)
+
+        // ক্রমে পরের স্লট চালু হলো: একই বেলার "পরে" হলে সাথে সাথে নোটিফিকেশন,
+        // পরের বেলার হলে তার সময় হয়ে গিয়ে থাকলে নোটিফিকেশন
+        val after = Store.data
+        val next = nextSlot(after, key, date)
+        if (next != null) {
+            val sameMeal = Slots.mealOf(next) == Slots.mealOf(key)
+            if (sameMeal || isActive(after, next, date)) fire(ctx, next, dateStr, 0)
+        }
+        scheduleAll(ctx)
+        return true
+    }
+
+    private fun removeTaken(ctx: Context, key: String, dateStr: String) {
+        val zone = ZoneId.systemDefault()
+        Store.update(ctx) { s ->
+            s.copy(
+                taken = s.taken - "$dateStr|$key",
+                log = s.log.filterNot { e ->
+                    e.slotKey == key &&
+                        Instant.ofEpochMilli(e.time).atZone(zone).toLocalDate().toString() == dateStr
+                }
+            )
+        }
+        cancelNotif(ctx, key)
+        cancelNag(ctx, key)
+    }
+
+    // "খেয়েছি" আবার চাপলে বাতিল। খাবারের আগেরটা বাতিল করলে পরেরটাও অটো বাতিল হয়ে যায়
+    fun unmarkTaken(ctx: Context, key: String, dateStr: String) {
+        Store.ensureLoaded(ctx)
+        removeTaken(ctx, key, dateStr)
+        if (Slots.isBefore(key)) {
+            // পরের স্লট বাতিল ও তার নোটিফিকেশন বন্ধ
+            removeTaken(ctx, Slots.mealOf(key) + "_AFTER", dateStr)
+        }
+        // খাওয়া হয়নি ধরা হলো, তাই নোটিফিকেশন আবার চালু
+        val d = Store.data
+        if (isActive(d, key, LocalDate.parse(dateStr))) fire(ctx, key, dateStr, 0)
+        scheduleAll(ctx)
+    }
+}
