@@ -1346,107 +1346,20 @@ fun SettingsScreen() {
 
 // ------------------------------------------------------------------ about
 
-// এক লাইনে ধরানোর জন্য দরকার হলে লেখা ছোট হয়ে যায়
+// একটা শব্দ ধীরে ফুটে ওঠে ও একটু উপরে ওঠে
 @Composable
-private fun OneLineFit(text: androidx.compose.ui.text.AnnotatedString, maxSp: Float, color: Color) {
-    var size by remember(text) { mutableStateOf(maxSp) }
-    Text(
-        text,
-        color = color,
-        fontWeight = FontWeight.Bold,
-        fontSize = size.sp,
-        maxLines = 1,
-        softWrap = false,
-        textAlign = TextAlign.Center,
-        onTextLayout = { r -> if (r.didOverflowWidth && size > 7f) size -= 0.5f },
-        modifier = Modifier.fillMaxWidth()
-    )
-}
-
-private class BloodSpot(val x: Float, val y: Float, val period: Float, val phase: Float, val r: Float, val drip: Float)
-
-// স্ক্রিনের নানা জায়গা থেকে ফিকে হয়ে রক্ত ধীরে ফুটে বেরোয়, একটু ছড়ায়, গড়ায়, তারপর মিলিয়ে যায়
-@Composable
-private fun BloodRain(modifier: Modifier) {
-    val spots = remember {
-        val rnd = kotlin.random.Random(23)
-        List(14) {
-            BloodSpot(
-                x = 0.06f + rnd.nextFloat() * 0.88f,
-                y = 0.05f + rnd.nextFloat() * 0.9f,
-                period = 6f + rnd.nextFloat() * 5f,
-                phase = rnd.nextFloat(),
-                r = 22f + rnd.nextFloat() * 38f,
-                drip = 20f + rnd.nextFloat() * 60f
-            )
-        }
-    }
-    var t by remember { mutableStateOf(0f) }
-    LaunchedEffect(Unit) {
-        val start = androidx.compose.runtime.withFrameNanos { it }
-        while (true) {
-            androidx.compose.runtime.withFrameNanos { t = (it - start) / 1_000_000_000f }
-        }
-    }
-    androidx.compose.foundation.Canvas(modifier) {
-        spots.forEach { sp ->
-            val p = (t / sp.period + sp.phase) % 1f
-            // ০..০.৬ ফুটে ওঠা ও বড় হওয়া, ০.৬..০.৮ থেমে থাকা, ০.৮..১ মিলিয়ে যাওয়া
-            val grow = (p / 0.6f).coerceIn(0f, 1f)
-            val ease = grow * grow * (3f - 2f * grow)
-            val fade = if (p < 0.8f) 1f else (1f - (p - 0.8f) / 0.2f)
-            val alpha = (0.75f * ease * fade).coerceIn(0f, 1f)
-            if (alpha <= 0.01f) return@forEach
-            val c = androidx.compose.ui.geometry.Offset(sp.x * size.width, sp.y * size.height)
-            val radius = sp.r.dp.toPx() * (0.25f + 0.75f * ease)
-            drawCircle(
-                brush = androidx.compose.ui.graphics.Brush.radialGradient(
-                    colors = listOf(
-                        Color(0xFFB71C1C).copy(alpha = alpha),
-                        Color(0xFF7F0000).copy(alpha = alpha * 0.55f),
-                        Color(0x007F0000)
-                    ),
-                    center = c,
-                    radius = radius
-                ),
-                radius = radius,
-                center = c
-            )
-            // ছোট একটা ধারা নিচের দিকে গড়ায়
-            val dl = sp.drip.dp.toPx() * ease
-            if (dl > 2f) {
-                drawLine(
-                    brush = androidx.compose.ui.graphics.Brush.verticalGradient(
-                        colors = listOf(Color(0xFF8E0000).copy(alpha = alpha * 0.9f), Color(0x008E0000)),
-                        startY = c.y,
-                        endY = c.y + dl
-                    ),
-                    start = c,
-                    end = androidx.compose.ui.geometry.Offset(c.x, c.y + dl),
-                    strokeWidth = 3.dp.toPx()
-                )
-            }
-        }
-    }
-}
-
-// একটা লাইন ধীরে ফুটে ওঠে ও একটু উপরে ওঠে
-@Composable
-private fun FadeLine(text: String, show: Boolean, color: Color, bold: Boolean = false) {
+private fun FadeWord(text: String, show: Boolean, color: Color) {
     val a by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (show) 1f else 0f,
-        animationSpec = androidx.compose.animation.core.tween(800),
-        label = "line"
+        animationSpec = androidx.compose.animation.core.tween(500),
+        label = "word"
     )
     Text(
         text,
         color = color,
-        fontSize = 16.sp,
-        fontWeight = if (bold) FontWeight.Bold else FontWeight.Medium,
-        textAlign = TextAlign.Center,
-        modifier = Modifier
-            .fillMaxWidth()
-            .graphicsLayer { alpha = a; translationY = (1f - a) * 28f }
+        fontSize = 17.sp,
+        fontWeight = FontWeight.Medium,
+        modifier = Modifier.graphicsLayer { alpha = a; translationY = (1f - a) * 18f }
     )
 }
 
@@ -1454,111 +1367,57 @@ private fun FadeLine(text: String, show: Boolean, color: Color, bold: Boolean = 
 fun AboutDialog(onClose: () -> Unit) {
     var showProfile by remember { mutableStateOf(false) }
     val red = Color(0xFFE53935)
-    val lines = listOf(
-        "শহীদ আবরার ফাহাদ, শরিফ ওসমান বিন হাদী এবং" to red,
-        "জুলাই গণঅভ্যুত্থানের সকল শহীদের স্মৃতির প্রতি" to red,
-        "গভীর শ্রদ্ধায় উৎসর্গীকৃত।" to red,
-        "মহান আল্লাহ তাঁদের শহীদ হিসেবে কবুল করুন" to Color.White,
-        "এবং জান্নাতুল ফেরদৌস নসিব করুন।" to Color.White,
-        "আমিন।" to Color.White
-    )
-    // কয়টা লাইন এখন দেখা যাচ্ছে (একটা একটা করে বাড়ে)
+    val dedication = "শহীদ আবরার ফাহাদ, শরিফ ওসমান বিন হাদী এবং জুলাই গণঅভ্যুত্থানের সকল শহীদের স্মৃতির প্রতি গভীর শ্রদ্ধায় উৎসর্গীকৃত।"
+    val prayer = "মহান আল্লাহ তাঁদের শহীদ হিসেবে কবুল করুন এবং জান্নাতুল ফেরদৌস নসিব করুন। আমিন।"
+    // প্রতিটা শব্দ আলাদা করে (উৎসর্গের অংশ লাল, দোয়ার অংশ সাদা)
+    val words = dedication.split(" ").map { it to red } + prayer.split(" ").map { it to Color.White }
+    // কয়টা শব্দ এখন দেখা যাচ্ছে (একটা একটা করে বাড়ে)
     var shown by remember { mutableStateOf(0) }
     LaunchedEffect(Unit) {
-        delay(600)
-        for (i in 1..lines.size) {
+        delay(700)
+        for (i in 1..words.size) {
             shown = i
-            delay(1100)
+            delay(260)
         }
     }
     Dialog(
         onDismissRequest = onClose,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(
-                    androidx.compose.ui.graphics.Brush.verticalGradient(
-                        listOf(Color(0xFF050505), Color(0xFF120404), Color(0xFF3B0808))
-                    )
-                )
-        ) {
-            BloodRain(Modifier.fillMaxSize())
-            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
-                // ছবি দুটো স্ক্রিনের ঠিক মাঝখানে। উচ্চতা বেশি না হয় সেজন্য সীমা দেওয়া
-                val gap = 12.dp
-                val sidePad = 16.dp
-                val byWidth = (maxWidth - sidePad * 2 - gap) / 2
-                val imgW = minOf(byWidth, maxHeight * 0.28f * 0.8f)
-                val imgH = imgW / 0.8f
-
-                Column(
-                    Modifier.fillMaxWidth().padding(top = 48.dp, start = sidePad, end = sidePad),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        OneLineFit(androidx.compose.ui.text.AnnotatedString("ভারতীয় আধিপত্যবাদের বিরুদ্ধে"), 22f, Color.White)
-                        OneLineFit(
-                            buildAnnotatedString {
-                                withStyle(SpanStyle(color = red)) { append("প্রতিবাদ ও প্রতিরোধের") }
-                                withStyle(SpanStyle(color = Color.White)) { append(" চেতনায়") }
-                            },
-                            22f, Color.White
-                        )
-                    }
-                    Box(
-                        Modifier
-                            .padding(top = 10.dp)
-                            .fillMaxWidth(0.55f)
-                            .height(2.dp)
-                            .background(
-                                androidx.compose.ui.graphics.Brush.horizontalGradient(
-                                    listOf(Color.Transparent, red, Color.Transparent)
-                                )
-                            )
-                    )
-                }
-
-                Row(
-                    Modifier.align(Alignment.Center).fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(gap, Alignment.CenterHorizontally)
-                ) {
-                    listOf(R.drawable.about_1, R.drawable.about_2).forEach { res ->
-                        Image(
-                            painter = painterResource(res),
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.width(imgW).height(imgH)
-                        )
-                    }
-                }
-
-                Column(
-                    Modifier
-                        .align(Alignment.TopCenter)
-                        .fillMaxWidth()
-                        .padding(top = maxHeight / 2 + imgH / 2 + 22.dp, start = sidePad, end = sidePad),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    lines.forEachIndexed { i, (txt, col) ->
-                        FadeLine(txt, shown > i, col, bold = i == lines.size - 1)
-                    }
-                }
-            }
-            // নাম একদম নিচে
-            Text(
-                "মোঃ জাহাঙ্গীর আলম জীবন",
-                color = Color(0xFF80CBC4),
-                fontWeight = FontWeight.Bold,
-                fontSize = 22.sp,
-                textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+        Box(Modifier.fillMaxSize().background(Color.Black)) {
+            Column(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 24.dp)
-                    .clickable { showProfile = true }
-                    .padding(8.dp)
-            )
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(top = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.about_poster),
+                    contentDescription = null,
+                    contentScale = ContentScale.FillWidth,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    words.forEachIndexed { i, (w, col) -> FadeWord(w, shown > i, col) }
+                }
+                // নাম একদম নিচে
+                Text(
+                    "মোঃ জাহাঙ্গীর আলম জীবন",
+                    color = Color(0xFF80CBC4),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 22.sp,
+                    textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+                    modifier = Modifier
+                        .padding(top = 8.dp, bottom = 28.dp)
+                        .clickable { showProfile = true }
+                        .padding(8.dp)
+                )
+            }
         }
     }
     if (showProfile) ProfileDialog { showProfile = false }
