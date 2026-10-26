@@ -25,6 +25,9 @@ body{
   padding:28px;
   box-shadow: 0 10px 30px rgba(2,6,23,0.6);
   text-align:center;
+  display:flex;
+  flex-direction:column;
+  min-height:calc(100vh - 40px);
 }
 .avatar{
   width:96px;
@@ -50,7 +53,7 @@ h1{margin:0;font-size:1.6rem;letter-spacing:0.2px}
   line-height:1.45;
   font-size:0.95rem;
 }
-.actions{display:flex;gap:10px;justify-content:center;margin-top:6px}
+.actions{display:flex;gap:10px;justify-content:center;margin-top:auto;padding-top:18px}
 .btn{
   padding:10px 14px;border-radius:10px;text-decoration:none;font-weight:600;background:linear-gradient(90deg,var(--accent),#38b2ac);color:#062022;
 }

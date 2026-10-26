@@ -281,7 +281,7 @@ fun MedsScreen(onNew: () -> Unit, onEdit: (Medicine) -> Unit) {
                 val f = Forms.of(m.form)
                 val isOpen = open.contains(m.id)
                 Card(
-                    onClick = { open = if (isOpen) open - m.id else open + m.id },
+                    onClick = { open = if (isOpen) emptySet() else setOf(m.id) },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -503,10 +503,10 @@ fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
 
                 // নাম ও পাওয়ার
                 Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                    Text("ঔষধের নাম", fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
-                        label = { Text("নাম ও পাওয়ার") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1357,7 +1357,8 @@ private fun FadeWord(text: String, show: Boolean, color: Color) {
     Text(
         text,
         color = color,
-        fontSize = 17.sp,
+        fontSize = 13.sp,
+        lineHeight = 17.sp,
         fontWeight = FontWeight.Medium,
         modifier = Modifier.graphicsLayer { alpha = a; translationY = (1f - a) * 18f }
     )
@@ -1384,39 +1385,36 @@ fun AboutDialog(onClose: () -> Unit) {
         onDismissRequest = onClose,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
-        Box(Modifier.fillMaxSize().background(Color.Black)) {
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
+            // লেখা ও বাটনের জন্য নিচে জায়গা রেখে বাকিটা পোস্টারের, তাই স্ক্রল লাগে না
+            val posterH = minOf(maxWidth * 1.5f, maxHeight - 200.dp)
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(top = 24.dp),
+                modifier = Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Image(
                     painter = painterResource(R.drawable.about_poster),
                     contentDescription = null,
-                    contentScale = ContentScale.FillWidth,
-                    modifier = Modifier.fillMaxWidth()
+                    contentScale = ContentScale.Fit,
+                    alignment = Alignment.TopCenter,
+                    modifier = Modifier.fillMaxWidth().height(posterH)
                 )
                 FlowRow(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterHorizontally),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     words.forEachIndexed { i, (w, col) -> FadeWord(w, shown > i, col) }
                 }
-                // নাম একদম নিচে
-                Text(
-                    "মোঃ জাহাঙ্গীর আলম জীবন",
-                    color = Color(0xFF80CBC4),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 22.sp,
-                    textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
-                    modifier = Modifier
-                        .padding(top = 8.dp, bottom = 28.dp)
-                        .clickable { showProfile = true }
-                        .padding(8.dp)
-                )
+                Box(Modifier.weight(1f))
+                // নামের বাটন একদম নিচে
+                androidx.compose.material3.Button(
+                    onClick = { showProfile = true },
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFFB71C1C)),
+                    modifier = Modifier.padding(bottom = 20.dp)
+                ) {
+                    Text("মোঃ জাহাঙ্গীর আলম জীবন", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                }
             }
         }
     }
