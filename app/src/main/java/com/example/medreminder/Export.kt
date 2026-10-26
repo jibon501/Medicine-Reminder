@@ -17,6 +17,26 @@ import androidx.core.content.FileProvider
 import java.io.File
 import java.time.LocalDate
 
+// তালিকার একটা লাইন: ওষুধ, কত দিনের, মোট কয়টা, আর বাদ দেওয়া হয়েছে কিনা
+data class PurchaseItem(val med: Medicine, val days: Int, val qty: Int, val excluded: Boolean) {
+    fun right(): String {
+        val parts = ArrayList<String>()
+        if (days > 0) parts.add(bn(days) + " দিনের কোর্স")
+        if (qty > 0) parts.add(bn(qty) + " " + Forms.of(med.form).unit)
+        return parts.joinToString("\n")
+    }
+
+    fun detail(): String = buildString {
+        if (med.form != "TABLET") append(Forms.of(med.form).label).append(" · ")
+        append("প্রতিবারে ").append(med.doseLabel())
+        if (med.intervalDays > 1) append(" · ").append(bn(med.intervalDays)).append(" দিন পর পর")
+        append("\n").append(med.timings.sortedBy { Reminders.slotOrder.indexOf(it) }.joinToString(", ") { Slots.label(it) })
+    }
+}
+
+// কোনো ওষুধের জন্য নিজের দেওয়া দিন / পরিমাণ, বা বাদ দেওয়া
+data class PurchaseOverride(val days: Int? = null, val qty: Int? = null, val excluded: Boolean = false)
+
 // ওষুধ কেনার তালিকা: একটা রোগের সব ওষুধ, কোনটা মোট কয়টা লাগবে
 object PurchaseList {
     private const val W = 1080
@@ -39,7 +59,7 @@ object PurchaseList {
     fun medsOf(d: AppData, disease: Disease): List<Medicine> =
         d.medicines.filter { it.diseaseId == disease.id }
 
-    fun build(disease: Disease, meds: List<Medicine>, days: Int = 0): Bitmap {
+    fun build(disease: Disease, items: List<PurchaseItem>, days: Int = 0): Bitmap {
         val black = Color.parseColor("#1B1B1B")
         val grey = Color.parseColor("#666666")
         val teal = Color.parseColor("#00796B")
@@ -58,19 +78,21 @@ object PurchaseList {
 
         data class Row(val left: StaticLayout, val detail: StaticLayout, val right: StaticLayout, val h: Int)
 
-        val rows = meds.mapIndexed { i, m ->
-            val l = layout(bn(i + 1) + ". " + m.name, nameP, leftW)
-            val detailText = buildString {
-                // নামের সাথে পাওয়ার থাকলে নামেই দেখা যাবে; "ট্যাবলেট / ক্যাপসুল" লেখা বাদ
-                if (m.form != "TABLET") append(Forms.of(m.form).label).append(" · ")
-                append("প্রতিবারে ").append(m.doseLabel())
-                if (m.intervalDays > 1) append(" · ").append(bn(m.intervalDays)).append(" দিন পর পর")
-                append("\n").append(m.timings.sortedBy { Reminders.slotOrder.indexOf(it) }.joinToString(", ") { Slots.label(it) })
-            }
-            val dl = layout(detailText, detailP, leftW)
-            // কয় দিনের কিনতে চান সেটা দিলে তবেই কোর্স ও মোট সংখ্যা আসবে
-            val rightText = if (days > 0) bn(days) + " দিনের কোর্স\n" + m.totalFor(days) else ""
-            val rl = layout(rightText, totalP, rightW, Layout.Alignment.ALIGN_OPPOSITE)
+        fun strike(p: TextPaint): TextPaint {
+            val q = TextPaint(p)
+            q.isStrikeThruText = true
+            q.color = Color.parseColor("#9E9E9E")
+            return q
+        }
+        val nameS = strike(nameP)
+        val detailS = strike(detailP)
+        val totalS = strike(totalP)
+
+        // বাদ দেওয়া ওষুধও দেখায়, কিন্তু পুরো লাইন (নামসহ) কাটা অবস্থায়
+        val rows = items.mapIndexed { i, pi ->
+            val l = layout(bn(i + 1) + ". " + pi.med.name, if (pi.excluded) nameS else nameP, leftW)
+            val dl = layout(pi.detail(), if (pi.excluded) detailS else detailP, leftW)
+            val rl = layout(pi.right(), if (pi.excluded) totalS else totalP, rightW, Layout.Alignment.ALIGN_OPPOSITE)
             Row(l, dl, rl, maxOf(l.height + 8 + dl.height, rl.height) + 36)
         }
 
@@ -81,7 +103,7 @@ object PurchaseList {
         if (days > 0) head.add(layout(bn(days) + " দিনের জন্য কিনতে হবে", subBoldP, inner))
 
         val foot = layout(
-            "মোট " + bn(meds.size) + " রকম · তালিকা তৈরি: " + prettyDate(LocalDate.now().toString()),
+            "মোট " + bn(items.count { !it.excluded }) + " রকম · তালিকা তৈরি: " + prettyDate(LocalDate.now().toString()),
             footP, inner
         )
 
