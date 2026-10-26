@@ -68,7 +68,7 @@ class MainActivity : ComponentActivity() {
 
 private val TABS = listOf(
     "📅" to "আজ",
-    "💊" to "ওষুধ",
+    "💊" to "ঔষধ",
     "🩺" to "রোগ",
     "⚙️" to "সেটিংস"
 )

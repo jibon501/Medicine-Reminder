@@ -17,7 +17,7 @@ import androidx.core.content.FileProvider
 import java.io.File
 import java.time.LocalDate
 
-// তালিকার একটা লাইন: ওষুধ, কত দিনের, মোট কয়টা, আর বাদ দেওয়া হয়েছে কিনা
+// তালিকার একটা লাইন: ঔষধ, কত দিনের, মোট কয়টা, আর বাদ দেওয়া হয়েছে কিনা
 data class PurchaseItem(val med: Medicine, val days: Int, val qty: Int, val excluded: Boolean) {
     fun right(): String {
         val parts = ArrayList<String>()
@@ -34,10 +34,10 @@ data class PurchaseItem(val med: Medicine, val days: Int, val qty: Int, val excl
     }
 }
 
-// কোনো ওষুধের জন্য নিজের দেওয়া দিন / পরিমাণ, বা বাদ দেওয়া
+// কোনো ঔষধের জন্য নিজের দেওয়া দিন / পরিমাণ, বা বাদ দেওয়া
 data class PurchaseOverride(val days: Int? = null, val qty: Int? = null, val excluded: Boolean = false)
 
-// ওষুধ কেনার তালিকা: একটা রোগের সব ওষুধ, কোনটা মোট কয়টা লাগবে
+// ঔষধ কেনার তালিকা: একটা রোগের সব ঔষধ, কোনটা মোট কয়টা লাগবে
 object PurchaseList {
     private const val W = 1080
     private const val PAD = 48
@@ -88,7 +88,7 @@ object PurchaseList {
         val detailS = strike(detailP)
         val totalS = strike(totalP)
 
-        // বাদ দেওয়া ওষুধও দেখায়, কিন্তু পুরো লাইন (নামসহ) কাটা অবস্থায়
+        // বাদ দেওয়া ঔষধও দেখায়, কিন্তু পুরো লাইন (নামসহ) কাটা অবস্থায়
         val rows = items.mapIndexed { i, pi ->
             val l = layout(bn(i + 1) + ". " + pi.med.name, if (pi.excluded) nameS else nameP, leftW)
             val dl = layout(pi.detail(), if (pi.excluded) detailS else detailP, leftW)
@@ -97,7 +97,7 @@ object PurchaseList {
         }
 
         val head = mutableListOf<StaticLayout>()
-        head.add(layout("🛒 ওষুধ কেনার তালিকা", titleP, inner))
+        head.add(layout("🛒 ঔষধ কেনার তালিকা", titleP, inner))
         head.add(layout("রোগ: " + disease.name, subBoldP, inner))
         if (days > 0) head.add(layout(bn(days) + " দিনের জন্য কিনতে হবে", subBoldP, inner))
 
@@ -129,7 +129,7 @@ object PurchaseList {
         y += 4 + 12
 
         if (rows.isEmpty()) {
-            val e = layout("এই রোগে এখনও কোনো ওষুধ যোগ করা হয়নি", detailP, inner)
+            val e = layout("এই রোগে এখনও কোনো ঔষধ যোগ করা হয়নি", detailP, inner)
             c.save(); c.translate(PAD.toFloat(), y + 20); e.draw(c); c.restore()
             y += 80
         }
@@ -148,7 +148,7 @@ object PurchaseList {
 
     private fun fileName(disease: Disease): String {
         val safe = disease.name.replace(Regex("[^\\p{L}\\p{N}]+"), "_").trim('_').ifBlank { "list" }
-        return "ওষুধ-তালিকা-$safe-${LocalDate.now()}.png"
+        return "ঔষধ-তালিকা-$safe-${LocalDate.now()}.png"
     }
 
     // শেয়ার (হোয়াটসঅ্যাপ, ড্রাইভ, গ্যালারি ইত্যাদি)
@@ -171,7 +171,7 @@ object PurchaseList {
         }
     }
 
-    // গ্যালারিতে (Pictures/ওষুধের তালিকা) সেভ। Android 10+ এ
+    // গ্যালারিতে (Pictures/ঔষধের তালিকা) সেভ। Android 10+ এ
     fun canSaveToGallery(): Boolean = Build.VERSION.SDK_INT >= 29
 
     fun saveToGallery(ctx: Context, bmp: Bitmap, disease: Disease): Boolean {

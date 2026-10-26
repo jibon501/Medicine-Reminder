@@ -25,10 +25,10 @@ object Reminders {
     // না খাওয়া পর্যন্ত প্রতি ৫ মিনিটে (সর্বোচ্চ ১২ ঘণ্টা)
     const val NAG_MAX = 144
 
-    // খাবারের আগের ওষুধের নোটিফিকেশন খাবারের সময়ের এত মিনিট আগে আসে
+    // খাবারের আগের ঔষধের নোটিফিকেশন খাবারের সময়ের এত মিনিট আগে আসে
     const val BEFORE_LEAD = 15
 
-    // খাবারের পরের ওষুধের নোটিফিকেশন খাবারের সময়ের এত মিনিট পরে আসে
+    // খাবারের পরের ঔষধের নোটিফিকেশন খাবারের সময়ের এত মিনিট পরে আসে
     const val AFTER_LAG = 30
     private const val FLAGS = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
 
@@ -36,7 +36,7 @@ object Reminders {
 
     fun allSlotKeys(d: AppData): List<String> = d.medicines.flatMap { it.timings }.distinct()
 
-    // সাইলেন্ট করা ওষুধ কোথাও আসবে না (নোটিফিকেশন, আজকের তালিকা)
+    // সাইলেন্ট করা ঔষধ কোথাও আসবে না (নোটিফিকেশন, আজকের তালিকা)
     fun medsFor(d: AppData, key: String, date: LocalDate): List<Medicine> =
         d.medicines.filter { !it.muted && it.timings.contains(key) && it.inCourseOn(date) }
 
@@ -68,7 +68,7 @@ object Reminders {
     // দিনের ক্রম: সকাল আগে → সকাল পরে → দুপুর আগে → দুপুর পরে → রাত আগে → রাত পরে
     val slotOrder: List<String> = Slots.meals.flatMap { listOf(it + "_BEFORE", it + "_AFTER") }
 
-    // এই দিনে এই স্লটের ঠিক আগের যে স্লটে ওষুধ আছে (ক্রমে চলার জন্য)
+    // এই দিনে এই স্লটের ঠিক আগের যে স্লটে ঔষধ আছে (ক্রমে চলার জন্য)
     fun prevSlot(d: AppData, key: String, date: LocalDate): String? {
         val idx = slotOrder.indexOf(key)
         for (i in idx - 1 downTo 0) {
@@ -77,7 +77,7 @@ object Reminders {
         return null
     }
 
-    // পরের স্লট (যেটায় ওষুধ আছে)
+    // পরের স্লট (যেটায় ঔষধ আছে)
     fun nextSlot(d: AppData, key: String, date: LocalDate): String? {
         val idx = slotOrder.indexOf(key)
         for (i in idx + 1 until slotOrder.size) {
@@ -86,7 +86,7 @@ object Reminders {
         return null
     }
 
-    // আগের স্লটের ওষুধ খাওয়া না হলে এটা আটকে থাকে। আগেরটা "খেয়েছি" দিলেই এটা চালু হয়
+    // আগের স্লটের ঔষধ খাওয়া না হলে এটা আটকে থাকে। আগেরটা "খেয়েছি" দিলেই এটা চালু হয়
     fun afterBlocked(d: AppData, key: String, dateStr: String): Boolean {
         val date = LocalDate.parse(dateStr)
         val prev = prevSlot(d, key, date) ?: return false
@@ -159,7 +159,7 @@ object Reminders {
     fun ensureChannel(ctx: Context) {
         val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (nm.getNotificationChannel(CHANNEL) != null) return
-        val ch = NotificationChannel(CHANNEL, "ওষুধের রিমাইন্ডার", NotificationManager.IMPORTANCE_HIGH)
+        val ch = NotificationChannel(CHANNEL, "ঔষধের রিমাইন্ডার", NotificationManager.IMPORTANCE_HIGH)
         ch.enableVibration(true)
         ch.vibrationPattern = longArrayOf(0, 500, 300, 500)
         val attrs = AudioAttributes.Builder()
@@ -204,10 +204,10 @@ object Reminders {
         if (meds.isEmpty()) return
         val prev = prevSlot(d, key, date)
         val blocked = prev != null && !d.taken.contains("$dateStr|$prev")
-        // একই বেলার আগের ওষুধ না খেলে পরের ওষুধের নোটিফিকেশন আসবে না
+        // একই বেলার আগের ঔষধ না খেলে পরের ঔষধের নোটিফিকেশন আসবে না
         if (blocked && Slots.mealOf(prev!!) == Slots.mealOf(key)) return
 
-        // আগের বেলার ওষুধ বাকি থাকলে শুধু জানানো হয়, বাটন ছাড়া
+        // আগের বেলার ঔষধ বাকি থাকলে শুধু জানানো হয়, বাটন ছাড়া
         showNotification(ctx, key, dateStr, meds, nag, blocked)
         if (!blocked && nag < NAG_MAX) {
             val at = System.currentTimeMillis() + NAG_MINUTES * 60_000L
@@ -227,7 +227,7 @@ object Reminders {
         val title = Slots.label(key)
         val lines = numberedLines(meds)
         val body = if (locked) {
-            lines.joinToString("\n") + "\n\n⏳ আগের ওষুধ আগে নিন, তারপর অ্যাপে গিয়ে \"খেয়েছি\" চাপুন"
+            lines.joinToString("\n") + "\n\n⏳ আগের ঔষধ আগে নিন, তারপর অ্যাপে গিয়ে \"খেয়েছি\" চাপুন"
         } else {
             lines.joinToString("\n")
         }
@@ -256,7 +256,7 @@ object Reminders {
         val n = NotificationCompat.Builder(ctx, CHANNEL)
             .setSmallIcon(R.drawable.ic_pill)
             .setContentTitle("টেস্ট নোটিফিকেশন")
-            .setContentText("এভাবেই ওষুধের রিমাইন্ডার আসবে")
+            .setContentText("এভাবেই ঔষধের রিমাইন্ডার আসবে")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setAutoCancel(true)
@@ -266,7 +266,7 @@ object Reminders {
 
     // ---------- taken ----------
 
-    // সফল হলে true। সময় না হলে বা আগের ওষুধ বাকি থাকলে false
+    // সফল হলে true। সময় না হলে বা আগের ঔষধ বাকি থাকলে false
     fun markTaken(ctx: Context, key: String, dateStr: String): Boolean {
         Store.ensureLoaded(ctx)
         val before = Store.data

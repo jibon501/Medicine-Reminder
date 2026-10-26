@@ -4,7 +4,7 @@ import android.content.Context
 import java.time.Instant
 import java.time.ZoneId
 
-// ইতিহাস এডিট: মুছে ফেলা, তারিখ/সময় বদলানো, বাদ পড়া ওষুধ নিজে যোগ করা
+// ইতিহাস এডিট: মুছে ফেলা, তারিখ/সময় বদলানো, বাদ পড়া ঔষধ নিজে যোগ করা
 object HistoryEdit {
     private fun dayOf(e: LogEntry): String =
         Instant.ofEpochMilli(e.time).atZone(ZoneId.systemDefault()).toLocalDate().toString()

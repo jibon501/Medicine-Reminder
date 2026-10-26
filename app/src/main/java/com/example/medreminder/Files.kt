@@ -118,7 +118,7 @@ fun importZip(ctx: Context, uri: Uri): Boolean {
         } else {
             val obj = JSONObject(j)
             if (obj.optBoolean("partial", false)) {
-                // একটা রোগের এক্সপোর্ট: বাকি সব ঠিক রেখে ওই রোগ ও তার ওষুধ যোগ/আপডেট হবে
+                // একটা রোগের এক্সপোর্ট: বাকি সব ঠিক রেখে ওই রোগ ও তার ঔষধ যোগ/আপডেট হবে
                 val parsed = AppData.fromJson(obj)
                 Store.update(ctx) { s ->
                     s.copy(
@@ -138,12 +138,12 @@ fun importZip(ctx: Context, uri: Uri): Boolean {
     }
 }
 
-// পড়ার মতো সাদামাটা লেখা: রোগ ও তার সব ওষুধের ডিটেলস
+// পড়ার মতো সাদামাটা লেখা: রোগ ও তার সব ঔষধের ডিটেলস
 fun diseaseText(ds: Disease, meds: List<Medicine>): String = buildString {
     append("রোগ: ").append(ds.name).append("\n")
     append("প্রেসক্রিপশনের তারিখ: ").append(prettyDate(ds.date)).append("\n")
     append("প্রেসক্রিপশনের ছবি: ").append(bn(ds.images.size)).append("টি\n")
-    append("মোট ওষুধ: ").append(bn(meds.size)).append("টি\n\n")
+    append("মোট ঔষধ: ").append(bn(meds.size)).append("টি\n\n")
     meds.forEachIndexed { i, m ->
         append(bn(i + 1)).append(". ").append(m.name).append("\n")
         append("   ধরন: ").append(Forms.of(m.form).label).append("\n")
@@ -157,7 +157,7 @@ fun diseaseText(ds: Disease, meds: List<Medicine>): String = buildString {
     }
 }
 
-// একটা রোগ + তার আন্ডারের সব ওষুধ (ডিটেলস সহ) + প্রেসক্রিপশনের ছবি এক zip এ
+// একটা রোগ + তার আন্ডারের সব ঔষধ (ডিটেলস সহ) + প্রেসক্রিপশনের ছবি এক zip এ
 fun exportDiseaseZip(ctx: Context, uri: Uri, disease: Disease): Boolean {
     return try {
         val d = Store.data

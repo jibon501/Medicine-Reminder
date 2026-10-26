@@ -10,8 +10,8 @@ import android.util.Xml
 import org.xmlpull.v1.XmlPullParser
 import java.util.zip.ZipInputStream
 
-// ওষুধের নামের সাজেশন।
-// ১) ইন্টারনেট থাকলে একবার NLM RxNorm থেকে ওষুধের নামের তালিকা নামিয়ে ফোনে রাখা হয় (প্রতি ৩০ দিনে নতুন করে)।
+// ঔষধের নামের সাজেশন।
+// ১) ইন্টারনেট থাকলে একবার NLM RxNorm থেকে ঔষধের নামের তালিকা নামিয়ে ফোনে রাখা হয় (প্রতি ৩০ দিনে নতুন করে)।
 // ২) তালিকা ফোনেই খোঁজা হয়, তাই আপনার টাইপ করা কিছুই অনলাইনে যায় না।
 // ৩) এর সাথে বাংলাদেশের পরিচিত নাম ও আপনার আগে দেওয়া নামও দেখানো হয়।
 object Suggest {
@@ -40,7 +40,7 @@ object Suggest {
 
     val onlineCount: Int get() = online.size
 
-    // ---------- Excel (xlsx/csv) তালিকা: প্রথম কলাম = ওষুধের নাম, দ্বিতীয় কলাম = পাওয়ার ----------
+    // ---------- Excel (xlsx/csv) তালিকা: প্রথম কলাম = ঔষধের নাম, দ্বিতীয় কলাম = পাওয়ার ----------
     @Volatile
     private var excel: List<String> = emptyList()
 
@@ -93,7 +93,7 @@ object Suggest {
         return if (p.isEmpty()) n else "$n $p"
     }
 
-    private val headerNames = setOf("name", "medicine", "medicine name", "drug", "drug name", "ওষুধ", "ওষুধের নাম", "ঔষধ", "নাম")
+    private val headerNames = setOf("name", "medicine", "medicine name", "drug", "drug name", "ওষুধ", "ওষুধের নাম", "ঔষধ", "ঔষধের নাম", "নাম")
     private val headerPower = setOf("power", "strength", "পাওয়ার")
 
     private fun rowsToNames(rows: List<Pair<String, String>>): List<String> {

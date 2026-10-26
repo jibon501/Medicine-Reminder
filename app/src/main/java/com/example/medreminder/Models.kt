@@ -68,7 +68,7 @@ data class Medicine(
                 diseaseId = o.optString("diseaseId", ""),
                 timings = times,
                 startDate = o.optString("startDate", ""),
-                courseDays = 0, // কোর্সের দিন আর ব্যবহার হয় না, ওষুধ চলমান ধরা হয়
+                courseDays = 0, // কোর্সের দিন আর ব্যবহার হয় না, ঔষধ চলমান ধরা হয়
                 form = o.optString("form", "TABLET"),
                 intervalDays = o.optInt("intervalDays", 1).coerceAtLeast(1),
                 muted = o.optBoolean("muted", false)
@@ -83,7 +83,7 @@ fun Medicine.isDoseDay(date: LocalDate): Boolean {
     return offset >= 0 && offset % intervalDays.coerceAtLeast(1) == 0L
 }
 
-// কোর্সের মধ্যে এবং (দিন পর পর হলে) ওষুধ খাওয়ার দিন কিনা
+// কোর্সের মধ্যে এবং (দিন পর পর হলে) ঔষধ খাওয়ার দিন কিনা
 fun Medicine.inCourseOn(date: LocalDate): Boolean {
     val start = runCatching { LocalDate.parse(startDate) }.getOrNull() ?: return true
     if (date.isBefore(start)) return false
@@ -91,14 +91,14 @@ fun Medicine.inCourseOn(date: LocalDate): Boolean {
     return isDoseDay(date)
 }
 
-// কোর্সে কত দিন ওষুধ নিতে হবে (দিন পর পর হলে কম)
+// কোর্সে কত দিন ঔষধ নিতে হবে (দিন পর পর হলে কম)
 fun Medicine.doseDays(): Int {
     if (courseDays <= 0) return 0
     val iv = intervalDays.coerceAtLeast(1)
     return (courseDays + iv - 1) / iv
 }
 
-// কোর্সের জন্য মোট কতটুকু লাগবে = ওষুধ নেওয়ার দিন × দিনে কতবার × প্রতিবারে কত
+// কোর্সের জন্য মোট কতটুকু লাগবে = ঔষধ নেওয়ার দিন × দিনে কতবার × প্রতিবারে কত
 fun Medicine.totalNeeded(): Int = doseDays() * timings.size * dose
 
 // দিন সংখ্যা নিজে দিলে কতটুকু লাগবে (দিন পর পর হলে সেটাও ধরে)

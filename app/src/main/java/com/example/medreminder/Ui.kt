@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 
 package com.example.medreminder
 
@@ -12,6 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -162,11 +163,11 @@ fun TodayScreen() {
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("আজকের ওষুধ", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            Text("আজকের ঔষধ", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
             Text(prettyDate(todayStr), style = MaterialTheme.typography.bodyMedium)
         }
         if (meals.isEmpty()) {
-            Text("আজকের জন্য কোনো ওষুধ নেই। \"ওষুধ\" ট্যাবে গিয়ে ওষুধ যোগ করুন।")
+            Text("আজকের জন্য কোনো ঔষধ নেই। \"ঔষধ\" ট্যাবে গিয়ে ঔষধ যোগ করুন।")
         }
         meals.forEach { meal ->
             val kb = meal + "_BEFORE"
@@ -215,11 +216,11 @@ private fun SlotPane(
         val meds = Reminders.medsFor(d, key, today)
         val blocked = Reminders.afterBlocked(d, key, todayStr)
 
-        // ওষুধ বেশি হলে শুধু এই অংশটা স্ক্রল হবে, বাটন নিচে স্থির থাকবে
+        // ঔষধ বেশি হলে শুধু এই অংশটা স্ক্রল হবে, বাটন নিচে স্থির থাকবে
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             Reminders.numberedLines(meds).forEach { Text(it, fontSize = fs, lineHeight = fs * 1.2f) }
         }
-        if (blocked && !done) Text("আগের ওষুধ আগে নিন", fontSize = 10.sp, color = Color.Gray)
+        if (blocked && !done) Text("আগের ঔষধ আগে নিন", fontSize = 10.sp, color = Color.Gray)
         // একটাই বাটন: না খেলে "খেয়েছি", খেলে "খাওয়া হয়েছে · খাইনি" (চাপলে আবার না-খাওয়া হয়ে যায়)
         if (done) {
             OutlinedButton(
@@ -236,7 +237,7 @@ private fun SlotPane(
             Button(
                 enabled = !blocked,
                 onClick = {
-                    if (!Reminders.markTaken(ctx, key, todayStr)) toast(ctx, "আগের ওষুধ আগে নিন")
+                    if (!Reminders.markTaken(ctx, key, todayStr)) toast(ctx, "আগের ঔষধ আগে নিন")
                 },
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                 modifier = Modifier.fillMaxWidth().height(44.dp)
@@ -264,10 +265,10 @@ fun diseaseMedTitle(name: String): String {
 fun MedsScreen(onNew: (String) -> Unit, onEdit: (Medicine) -> Unit) {
     val ctx = LocalContext.current
     val d = Store.data
-    // কোন কোন ওষুধের ডিটেলস খোলা আছে (বাকিগুলো মিনিমাইজ)
+    // কোন কোন ঔষধের ডিটেলস খোলা আছে (বাকিগুলো মিনিমাইজ)
     var open by remember { mutableStateOf(setOf<String>()) }
     var deleteFor by remember { mutableStateOf<Medicine?>(null) }
-    // কোন রোগের বাটন খোলা আছে: null = বাটনের তালিকা, "" = অন্যান্য ওষুধ, নইলে রোগের id
+    // কোন রোগের বাটন খোলা আছে: null = বাটনের তালিকা, "" = অন্যান্য ঔষধ, নইলে রোগের id
     var selRaw by rememberSaveable { mutableStateOf<String?>(null) }
     val diseaseIds = d.diseases.map { it.id }.toSet()
     val raw: String? = selRaw
@@ -298,7 +299,7 @@ fun MedsScreen(onNew: (String) -> Unit, onEdit: (Medicine) -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (d.diseases.isEmpty() && others.isEmpty()) {
-                    item { Text("এখনও কোনো ওষুধ নেই।", modifier = Modifier.padding(top = 8.dp)) }
+                    item { Text("এখনও কোনো ঔষধ নেই।", modifier = Modifier.padding(top = 8.dp)) }
                 }
                 items(d.diseases.reversed(), key = { it.id }) { ds ->
                     val n = d.medicines.count { it.diseaseId == ds.id }
@@ -315,7 +316,7 @@ fun MedsScreen(onNew: (String) -> Unit, onEdit: (Medicine) -> Unit) {
                                 containerColor = MaterialTheme.colorScheme.secondary
                             ),
                             modifier = Modifier.fillMaxWidth().height(52.dp)
-                        ) { Text("অন্যান্য ওষুধ (" + bn(others.size) + ")", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+                        ) { Text("অন্যান্য ঔষধ (" + bn(others.size) + ")", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
                     }
                 }
             }
@@ -325,13 +326,13 @@ fun MedsScreen(onNew: (String) -> Unit, onEdit: (Medicine) -> Unit) {
                     onNew(if (d.diseases.any { it.id == cur }) cur else "")
                 },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
-            ) { Text("+ নতুন ওষুধ যোগ করুন") }
+            ) { Text("+ নতুন ঔষধ যোগ করুন") }
         }
         return
     }
     val shown = if (sel == "") d.medicines.filter { it.diseaseId !in diseaseIds }
         else d.medicines.filter { it.diseaseId == sel }
-    val title = if (sel == "") "অন্যান্য ওষুধ"
+    val title = if (sel == "") "অন্যান্য ঔষধ"
         else diseaseMedTitle(d.diseases.firstOrNull { it.id == sel }?.name ?: "")
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -347,7 +348,7 @@ fun MedsScreen(onNew: (String) -> Unit, onEdit: (Medicine) -> Unit) {
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             if (shown.isEmpty()) {
-                item { Text("এই তালিকায় এখনও কোনো ওষুধ নেই।", modifier = Modifier.padding(top = 8.dp)) }
+                item { Text("এই তালিকায় এখনও কোনো ঔষধ নেই।", modifier = Modifier.padding(top = 8.dp)) }
             }
             items(shown, key = { it.id }) { m ->
                 val disease = d.diseases.firstOrNull { it.id == m.diseaseId }
@@ -407,7 +408,7 @@ fun MedsScreen(onNew: (String) -> Unit, onEdit: (Medicine) -> Unit) {
         Button(
             onClick = { onNew(sel) },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
-        ) { Text("+ নতুন ওষুধ যোগ করুন") }
+        ) { Text("+ নতুন ঔষধ যোগ করুন") }
     }
 }
 
@@ -441,7 +442,7 @@ fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
 
     fun save() {
         if (name.isBlank()) {
-            toast(ctx, "ওষুধের নাম দিন")
+            toast(ctx, "ঔষধের নাম দিন")
             return
         }
         if (timings.isEmpty()) {
@@ -497,7 +498,7 @@ fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
 
         // শিরোনাম মাঝখানে
         Text(
-            if (isNew) "নতুন ওষুধ" else "ওষুধ সম্পাদনা",
+            if (isNew) "নতুন ঔষধ" else "ঔষধ সম্পাদনা",
             style = MaterialTheme.typography.titleLarge,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
@@ -512,7 +513,7 @@ fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
                 modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.SpaceEvenly
             ) {
-                // তিনটা বাটন: রোগ · শুরুর তারিখ · ওষুধের ধরন। নিচে শুধু রোগের নাম, তারিখ, ধরনের নাম
+                // তিনটা বাটন: রোগ · শুরুর তারিখ · ঔষধের ধরন। নিচে শুধু রোগের নাম, তারিখ, ধরনের নাম
                 Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Box(Modifier.weight(1f)) {
@@ -544,7 +545,7 @@ fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
                                 onClick = { formMenu = true },
                                 contentPadding = PaddingValues(horizontal = 4.dp),
                                 modifier = Modifier.fillMaxWidth()
-                            ) { Text(f.emoji + " ওষুধের ধরন", fontSize = 13.sp, maxLines = 1) }
+                            ) { Text(f.emoji + " ঔষধের ধরন", fontSize = 13.sp, maxLines = 1) }
                             DropdownMenu(expanded = formMenu, onDismissRequest = { formMenu = false }) {
                                 Forms.all.forEach { fm ->
                                     DropdownMenuItem(
@@ -711,10 +712,10 @@ fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
 fun PurchaseListDialog(disease: Disease, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
     val meds = PurchaseList.medsOf(Store.data, disease)
-    // কয় দিনের ওষুধ কিনতে চান। ফাঁকা থাকলে শুধু নাম, সময় ও মাত্রা দেখাবে
+    // কয় দিনের ঔষধ কিনতে চান। ফাঁকা থাকলে শুধু নাম, সময় ও মাত্রা দেখাবে
     var daysText by remember { mutableStateOf("") }
     val days = daysText.toIntOrNull() ?: 0
-    // ওষুধ ধরে ধরে নিজের দেওয়া দিন/পরিমাণ বা বাদ দেওয়া
+    // ঔষধ ধরে ধরে নিজের দেওয়া দিন/পরিমাণ বা বাদ দেওয়া
     var overrides by remember { mutableStateOf(mapOf<String, PurchaseOverride>()) }
     var editing by remember { mutableStateOf<Medicine?>(null) }
 
@@ -743,10 +744,10 @@ fun PurchaseListDialog(disease: Disease, onDismiss: () -> Unit) {
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                NumField("কত দিনের ওষুধ কিনতে চান?", daysText) { daysText = it.take(3) }
+                NumField("কত দিনের ঔষধ কিনতে চান?", daysText) { daysText = it.take(3) }
                 if (days <= 0) Text("আগে দিন সংখ্যা দিন, তারপর সেভ ও শেয়ার চালু হবে", style = MaterialTheme.typography.bodySmall)
-                Text("কোনো ওষুধে ট্যাপ করলে তার দিন/পরিমাণ বদলানো বা বাদ দেওয়া যাবে", style = MaterialTheme.typography.bodySmall)
-                if (items.isEmpty()) Text("এই রোগে এখনও কোনো ওষুধ যোগ করা হয়নি")
+                Text("কোনো ঔষধে ট্যাপ করলে তার দিন/পরিমাণ বদলানো বা বাদ দেওয়া যাবে", style = MaterialTheme.typography.bodySmall)
+                if (items.isEmpty()) Text("এই রোগে এখনও কোনো ঔষধ যোগ করা হয়নি")
                 items.forEachIndexed { i, it ->
                     val line = if (it.excluded) androidx.compose.ui.text.style.TextDecoration.LineThrough
                     else androidx.compose.ui.text.style.TextDecoration.None
@@ -795,7 +796,7 @@ fun PurchaseListDialog(disease: Disease, onDismiss: () -> Unit) {
     )
 }
 
-// একটা ওষুধের জন্য দিন ও পরিমাণ নিজে বসানো, অথবা বাদ দেওয়া / ফিরিয়ে আনা
+// একটা ঔষধের জন্য দিন ও পরিমাণ নিজে বসানো, অথবা বাদ দেওয়া / ফিরিয়ে আনা
 @Composable
 fun PurchaseItemDialog(
     med: Medicine,
@@ -862,7 +863,7 @@ fun PurchaseItemDialog(
     )
 }
 
-// রোগ এক্সপোর্ট: ফাইলের জায়গা বাছাই করে ওই রোগ + তার সব ওষুধের ডিটেলস zip করে সেভ করে
+// রোগ এক্সপোর্ট: ফাইলের জায়গা বাছাই করে ওই রোগ + তার সব ঔষধের ডিটেলস zip করে সেভ করে
 @Composable
 fun rememberDiseaseExporter(): (Disease) -> Unit {
     val ctx = LocalContext.current
@@ -897,9 +898,11 @@ fun DiseasesScreen(onNew: () -> Unit, onEdit: (Disease) -> Unit, onAddMed: (Dise
                 "\"আর যখন আমি অসুস্থ হই, তখন তিনিই(আল্লাহ) আমাকে আরোগ্য করেন।\"",
                 fontWeight = FontWeight.Bold,
                 fontSize = 17.sp,
-                textAlign = TextAlign.Center,
+                maxLines = 1,
+                softWrap = false,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = Modifier.fillMaxWidth().padding(16.dp)
+                    .basicMarquee(iterations = Int.MAX_VALUE)
             )
         }
         LazyColumn(
@@ -922,7 +925,7 @@ fun DiseasesScreen(onNew: () -> Unit, onEdit: (Disease) -> Unit, onAddMed: (Dise
                         )
                         Text("তারিখ: " + prettyDate(ds.date))
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = { onAddMed(ds) }, modifier = Modifier.weight(1f)) { Text("ওষুধ +") }
+                            OutlinedButton(onClick = { onAddMed(ds) }, modifier = Modifier.weight(1f)) { Text("ঔষধ +") }
                             OutlinedButton(onClick = { listFor = ds }, modifier = Modifier.weight(1f)) { Text("🛒 কেনার তালিকা") }
                         }
                     }
@@ -1020,7 +1023,7 @@ fun DiseaseEditor(init: Disease, onClose: () -> Unit) {
         if (!isNew) {
             val cnt = Store.data.medicines.count { it.diseaseId == init.id }
             OutlinedButton(onClick = { showList = true }, modifier = Modifier.fillMaxWidth()) {
-                Text("🛒 কেনার তালিকা ছবি করুন (" + bn(cnt) + "টি ওষুধ)")
+                Text("🛒 কেনার তালিকা ছবি করুন (" + bn(cnt) + "টি ঔষধ)")
             }
         }
 
@@ -1082,7 +1085,7 @@ fun HistoryScreen() {
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             if (groups.isEmpty()) {
-                item { Text("এখনও কোনো ওষুধ খাওয়ার রেকর্ড নেই।") }
+                item { Text("এখনও কোনো ঔষধ খাওয়ার রেকর্ড নেই।") }
             }
             groups.forEach { (date, entries) ->
                 item {
@@ -1113,15 +1116,15 @@ fun HistoryScreen() {
         }
         Button(
             onClick = {
-                if (Store.data.medicines.isEmpty()) toast(ctx, "আগে ওষুধ যোগ করুন")
+                if (Store.data.medicines.isEmpty()) toast(ctx, "আগে ঔষধ যোগ করুন")
                 else adding = true
             },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
-        ) { Text("+ ভুলে বাদ পড়া ওষুধ যোগ করুন") }
+        ) { Text("+ ভুলে বাদ পড়া ঔষধ যোগ করুন") }
     }
 }
 
-// ইতিহাসের একটা এন্ট্রি বদলানো / মুছে ফেলা, অথবা (entry == null হলে) বাদ পড়া ওষুধ নিজে যোগ করা
+// ইতিহাসের একটা এন্ট্রি বদলানো / মুছে ফেলা, অথবা (entry == null হলে) বাদ পড়া ঔষধ নিজে যোগ করা
 @Composable
 fun LogEditDialog(entry: LogEntry?, onClose: () -> Unit) {
     val ctx = LocalContext.current
@@ -1154,7 +1157,7 @@ fun LogEditDialog(entry: LogEntry?, onClose: () -> Unit) {
         } else {
             val m = med
             if (m == null) {
-                toast(ctx, "ওষুধ বাছাই করুন")
+                toast(ctx, "ঔষধ বাছাই করুন")
                 return
             }
             HistoryEdit.upsert(ctx, null, LogEntry(millis, m.name, slot, m.dose, m.id))
@@ -1164,7 +1167,7 @@ fun LogEditDialog(entry: LogEntry?, onClose: () -> Unit) {
 
     AlertDialog(
         onDismissRequest = onClose,
-        title = { Text(if (isNew) "বাদ পড়া ওষুধ যোগ" else "ইতিহাস সম্পাদনা") },
+        title = { Text(if (isNew) "বাদ পড়া ঔষধ যোগ" else "ইতিহাস সম্পাদনা") },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -1176,7 +1179,7 @@ fun LogEditDialog(entry: LogEntry?, onClose: () -> Unit) {
                 } else {
                     Box {
                         OutlinedButton(onClick = { medMenu = true }, modifier = Modifier.fillMaxWidth()) {
-                            Text("ওষুধ: " + (med?.name ?: "বাছাই করুন"))
+                            Text("ঔষধ: " + (med?.name ?: "বাছাই করুন"))
                         }
                         DropdownMenu(expanded = medMenu, onDismissRequest = { medMenu = false }) {
                             d.medicines.forEach { m ->
@@ -1340,8 +1343,8 @@ fun SettingsScreen() {
                             }) { Text(pretty(d.night)) }
                         }
                         Text(
-                            "\"খাবারের আগের\" ওষুধের নোটিফিকেশন খাবারের সময়ের " + bn(Reminders.BEFORE_LEAD) +
-                                " মিনিট আগে, আর \"খাবারের পরের\" ওষুধের নোটিফিকেশন খাবারের সময়ের " + bn(Reminders.AFTER_LAG) +
+                            "\"খাবারের আগের\" ঔষধের নোটিফিকেশন খাবারের সময়ের " + bn(Reminders.BEFORE_LEAD) +
+                                " মিনিট আগে, আর \"খাবারের পরের\" ঔষধের নোটিফিকেশন খাবারের সময়ের " + bn(Reminders.AFTER_LAG) +
                                 " মিনিট পরে আসবে। না খাওয়া পর্যন্ত প্রতি " + bn(Reminders.NAG_MINUTES) +
                                 " মিনিট পর পর আবার আসবে।",
                             style = MaterialTheme.typography.bodySmall
@@ -1361,6 +1364,22 @@ fun SettingsScreen() {
             modifier = Modifier.fillMaxWidth()
         ) { Text("📥 রিস্টোর") }
 
+        Text("নোটিফিকেশন ঠিকমতো আসার জন্য", style = MaterialTheme.typography.titleMedium)
+        Button(onClick = { Reminders.testNotification(ctx) }, modifier = Modifier.fillMaxWidth()) {
+            Text("🔔 টেস্ট নোটিফিকেশন পাঠান")
+        }
+        OutlinedButton(
+            onClick = {
+                try {
+                    ctx.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                } catch (e: Exception) {
+                    toast(ctx, "সেটিংস খোলা যায়নি")
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("🔋 ব্যাটারি সেভার থেকে অ্যাপটি বাদ দিন") }
+
+        // হেল্প বাটন সবার শেষে (ABOUT এর ঠিক উপরে)
         var showHelp by remember { mutableStateOf(false) }
         OutlinedButton(onClick = { showHelp = true }, modifier = Modifier.fillMaxWidth()) {
             Text("❓ হেল্প")
@@ -1370,21 +1389,22 @@ fun SettingsScreen() {
                 onDismissRequest = { showHelp = false },
                 title = { Text("হেল্প") },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("নোটিফিকেশন ঠিকমতো আসার জন্য", fontWeight = FontWeight.Bold)
-                        Button(onClick = { Reminders.testNotification(ctx) }, modifier = Modifier.fillMaxWidth()) {
-                            Text("🔔 টেস্ট নোটিফিকেশন পাঠান")
-                        }
-                        OutlinedButton(
-                            onClick = {
-                                try {
-                                    ctx.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-                                } catch (e: Exception) {
-                                    toast(ctx, "সেটিংস খোলা যায়নি")
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text("🔋 ব্যাটারি সেভার থেকে অ্যাপটি বাদ দিন") }
+                    Column(
+                        modifier = Modifier.verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("ব্যবহার নির্দেশিকা", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.primary)
+                        Text("১. অ্যাপ খুললে প্রথমে ৫ সেকেন্ড একটি আয়াত দেখা যায়, তারপর মূল পর্দা আসে। নিচে চারটি ট্যাব আছে:", fontWeight = FontWeight.Bold)
+                        Text("• 📅 আজ — আজকের ঔষধের তালিকা ও \"খেয়েছি\" বাটন\n• 💊 ঔষধ — সব ঔষধ, রোগের নাম অনুযায়ী বাটনে সাজানো\n• 🩺 রোগ — রোগ, প্রেসক্রিপশনের ছবি ও কেনার তালিকা\n• ⚙️ সেটিংস — থিম, খাবারের সময়, ব্যাকআপ, হেল্প")
+                        Text("২. সেটআপ", fontWeight = FontWeight.Bold)
+                        Text("1. অ্যাপ প্রথমবার খুললে নোটিফিকেশনের অনুমতি চাইবে। অনুমতি দিন, নইলে রিমাইন্ডার আসবে না।\n2. সেটিংস → 🍽 খাবারের সময়-এ সকাল, দুপুর ও রাতের খাবারের সময় ঠিক করুন। ঔষধের রিমাইন্ডার এই সময় ধরেই আসে।\n3. সেটিংসের \"নোটিফিকেশন ঠিকমতো আসার জন্য\" অংশে গিয়ে:\n    ◦ 🔔 টেস্ট নোটিফিকেশন পাঠান চাপুন এবং নোটিফিকেশন আসছে কিনা দেখুন।\n    ◦ 🔋 ব্যাটারি সেভার থেকে অ্যাপটি বাদ দিন চাপুন। এটা না করলে কিছু ফোন অ্যাপ বন্ধ করে দেয় এবং রিমাইন্ডার আসে না।\n4. পছন্দমতো থিম বেছে নিন: ☀️ লাইট, 🌙 ব্ল্যাক, বা 📱 অটো (ফোনের সেটিং অনুযায়ী)।")
+                        Text("৩. রোগ যোগ করা", fontWeight = FontWeight.Bold)
+                        Text("প্রথমে রোগ যোগ করা ভালো, তাহলে ঔষধ সেই রোগের নিচে গুছানো থাকবে।")
+                        Text("৪. ঔষধ যোগ করা", fontWeight = FontWeight.Bold)
+                        Text("৫. কেনার তালিকা", fontWeight = FontWeight.Bold)
+                        Text("ঔষধ কেনার সময় কতগুলো লাগবে তার হিসাব এই অংশ করে দেয়।")
+                        Text("দৈনন্দিন ব্যবহারের সংক্ষিপ্ত নিয়ম", fontWeight = FontWeight.Bold)
+                        Text("1. সকালে অ্যাপ খুলে আজ ট্যাবে দেখুন কোন কোন ঔষধ আছে।\n2. নোটিফিকেশন এলে ঔষধ খান এবং ✅ খেয়েছি চাপুন।\n3. ডাক্তারের কাছ থেকে এসে রোগ ট্যাবে নতুন রোগ ও প্রেসক্রিপশনের ছবি যোগ করুন।\n4. ঔষধ কেনার আগে 🛒 কেনার তালিকা বানিয়ে সঙ্গে নিন।\n5. সপ্তাহে একবার ব্যাকআপ নিন।")
                     }
                 },
                 confirmButton = { TextButton(onClick = { showHelp = false }) { Text("বন্ধ") } }
