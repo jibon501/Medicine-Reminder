@@ -162,6 +162,8 @@ fun AppRoot() {
                 BackHandler { editDisease = null }
                 DiseaseEditor(ed) { editDisease = null }
             } else {
+                // ফোনের ব্যাক: অন্য ট্যাব থেকে আগে ড্যাশ (আজ) এ আসবে, ড্যাশে থাকলে অ্যাপ বন্ধ হবে
+                BackHandler(enabled = tab != 0) { tab = 0 }
                 Scaffold(
                     bottomBar = {
                         NavigationBar {

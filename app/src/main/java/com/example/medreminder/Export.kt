@@ -99,7 +99,6 @@ object PurchaseList {
         val head = mutableListOf<StaticLayout>()
         head.add(layout("🛒 ওষুধ কেনার তালিকা", titleP, inner))
         head.add(layout("রোগ: " + disease.name, subBoldP, inner))
-        head.add(layout("প্রেসক্রিপশনের তারিখ: " + prettyDate(disease.date), subP, inner))
         if (days > 0) head.add(layout(bn(days) + " দিনের জন্য কিনতে হবে", subBoldP, inner))
 
         val foot = layout(

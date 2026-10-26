@@ -58,6 +58,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -87,14 +88,24 @@ import java.time.ZoneId
 
 @Composable
 fun NumField(label: String, value: String, onChange: (String) -> Unit) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = { v -> onChange(v.filter { it in '0'..'9' }) },
-        label = { Text(label) },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        modifier = Modifier.fillMaxWidth()
-    )
+    if (label.isEmpty()) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = { v -> onChange(v.filter { it in '0'..'9' }) },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth()
+        )
+    } else {
+        OutlinedTextField(
+            value = value,
+            onValueChange = { v -> onChange(v.filter { it in '0'..'9' }) },
+            label = { Text(label) },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
 }
 
 @Composable
@@ -281,6 +292,8 @@ fun MedsScreen(onNew: () -> Unit, onEdit: (Medicine) -> Unit) {
                             Text(m.timings.joinToString("\n") { "• " + Slots.label(it) })
                             if (disease != null) Text("রোগ: " + disease.name)
                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                OutlinedButton(onClick = { onEdit(m) }) { Text("✏️ সম্পাদনা") }
+                                Box(Modifier.weight(1f))
                                 Text(if (m.muted) "🔕" else "🔔")
                                 Switch(
                                     checked = !m.muted,
@@ -292,8 +305,6 @@ fun MedsScreen(onNew: () -> Unit, onEdit: (Medicine) -> Unit) {
                                     },
                                     modifier = Modifier.padding(start = 8.dp)
                                 )
-                                Box(Modifier.weight(1f))
-                                OutlinedButton(onClick = { onEdit(m) }) { Text("✏️ সম্পাদনা") }
                             }
                         }
                     }
@@ -362,16 +373,14 @@ fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
         onClose()
     }
 
+    var doseDialog by remember { mutableStateOf(false) }
+    var intervalDialog by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(horizontal = 16.dp, vertical = 10.dp)
     ) {
-        Text(
-            if (isNew) "নতুন ওষুধ" else "ওষুধ সম্পাদনা",
-            style = MaterialTheme.typography.titleLarge
-        )
         var suggestions by remember { mutableStateOf(emptyList<String>()) }
         var skipNext by remember { mutableStateOf(false) }
         var listVersion by remember { mutableStateOf(0) }
@@ -394,100 +403,174 @@ fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
             suggestions = withContext(Dispatchers.Default) { Suggest.query(name, mine) }
         }
 
-        // উপরে পাশাপাশি তিনটা বাটন: রোগ · শুরুর তারিখ · ওষুধের ধরন (তারিখ বাটনে তারিখ দেখানো হয় না)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Box(Modifier.weight(1f)) {
-                OutlinedButton(
-                    onClick = { menu = true },
-                    contentPadding = PaddingValues(horizontal = 4.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("🩺 রোগ", fontSize = 13.sp, maxLines = 1) }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(
-                        text = { Text("কোনো রোগ নয়") },
-                        onClick = { diseaseId = ""; menu = false }
-                    )
-                    d.diseases.forEach { ds ->
-                        DropdownMenuItem(
-                            text = { Text(ds.name) },
-                            onClick = { diseaseId = ds.id; menu = false }
-                        )
-                    }
-                }
-            }
-            OutlinedButton(
-                onClick = { pickDate(ctx, start) { start = it } },
-                contentPadding = PaddingValues(horizontal = 4.dp),
-                modifier = Modifier.weight(1f)
-            ) { Text("📅 শুরুর তারিখ", fontSize = 13.sp, maxLines = 1) }
-            Box(Modifier.weight(1f)) {
-                OutlinedButton(
-                    onClick = { formMenu = true },
-                    contentPadding = PaddingValues(horizontal = 4.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text(f.emoji + " ওষুধের ধরন", fontSize = 13.sp, maxLines = 1) }
-                DropdownMenu(expanded = formMenu, onDismissRequest = { formMenu = false }) {
-                    Forms.all.forEach { fm ->
-                        DropdownMenuItem(
-                            text = { Text(fm.emoji + " " + fm.label) },
-                            onClick = { form = fm.id; formMenu = false }
-                        )
-                    }
-                }
-            }
-        }
+        // শিরোনাম মাঝখানে
         Text(
-            "রোগ: " + (d.diseases.firstOrNull { it.id == diseaseId }?.name ?: "—") + "  ·  ধরন: " + f.label,
-            style = MaterialTheme.typography.bodySmall
+            if (isNew) "নতুন ওষুধ" else "ওষুধ সম্পাদনা",
+            style = MaterialTheme.typography.titleLarge,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
         )
 
-        OutlinedTextField(
-            value = name,
-            onValueChange = { name = it },
-            label = { Text("নাম ও পাওয়ার (টাইপ করলে সাজেশন আসবে)") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-        if (suggestions.isNotEmpty()) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column {
-                    suggestions.take(4).forEach { s ->
-                        Text(
-                            s,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    skipNext = true
-                                    name = s
-                                    suggestions = emptyList()
+        // মাঝের অংশ: সবগুলোর মাঝে সমান গ্যাপ। জায়গা কম হলে স্ক্রল হবে
+        Column(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            verticalArrangement = Arrangement.Top
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.SpaceEvenly
+            ) {
+                // তিনটা বাটন: রোগ · শুরুর তারিখ · ওষুধের ধরন। নিচে শুধু রোগের নাম, তারিখ, ধরনের নাম
+                Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Box(Modifier.weight(1f)) {
+                            OutlinedButton(
+                                onClick = { menu = true },
+                                contentPadding = PaddingValues(horizontal = 4.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("🩺 রোগ", fontSize = 13.sp, maxLines = 1) }
+                            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("কোনো রোগ নয়") },
+                                    onClick = { diseaseId = ""; menu = false }
+                                )
+                                d.diseases.forEach { ds ->
+                                    DropdownMenuItem(
+                                        text = { Text(ds.name) },
+                                        onClick = { diseaseId = ds.id; menu = false }
+                                    )
                                 }
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                            }
+                        }
+                        OutlinedButton(
+                            onClick = { pickDate(ctx, start) { start = it } },
+                            contentPadding = PaddingValues(horizontal = 4.dp),
+                            modifier = Modifier.weight(1f)
+                        ) { Text("📅 শুরুর তারিখ", fontSize = 13.sp, maxLines = 1) }
+                        Box(Modifier.weight(1f)) {
+                            OutlinedButton(
+                                onClick = { formMenu = true },
+                                contentPadding = PaddingValues(horizontal = 4.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text(f.emoji + " ওষুধের ধরন", fontSize = 13.sp, maxLines = 1) }
+                            DropdownMenu(expanded = formMenu, onDismissRequest = { formMenu = false }) {
+                                Forms.all.forEach { fm ->
+                                    DropdownMenuItem(
+                                        text = { Text(fm.emoji + " " + fm.label) },
+                                        onClick = { form = fm.id; formMenu = false }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            d.diseases.firstOrNull { it.id == diseaseId }?.name ?: "—",
+                            fontSize = 12.sp, textAlign = TextAlign.Center, maxLines = 2,
+                            modifier = Modifier.weight(1f)
                         )
+                        Text(
+                            prettyDate(start),
+                            fontSize = 12.sp, textAlign = TextAlign.Center, maxLines = 2,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            f.label,
+                            fontSize = 12.sp, textAlign = TextAlign.Center, maxLines = 2,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                // নাম ও পাওয়ার
+                Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("নাম ও পাওয়ার") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (suggestions.isNotEmpty()) {
+                        Card(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                            Column {
+                                suggestions.take(4).forEach { sg ->
+                                    Text(
+                                        sg,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                skipNext = true
+                                                name = sg
+                                                suggestions = emptyList()
+                                            }
+                                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // প্রতিবারে কতটি · কতদিন পর পর: দুটো বাটন এক লাইনে, মান নিচে। চাপলে এডিট
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        OutlinedButton(
+                            onClick = { doseDialog = true },
+                            contentPadding = PaddingValues(horizontal = 4.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("প্রতিবারে কতটি", fontSize = 13.sp, maxLines = 1) }
+                        Text(
+                            bn((dose.toIntOrNull() ?: 1).coerceAtLeast(1)) + " " + f.unit,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        OutlinedButton(
+                            onClick = { intervalDialog = true },
+                            contentPadding = PaddingValues(horizontal = 4.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("কতদিন পর পর", fontSize = 13.sp, maxLines = 1) }
+                        val iv = (interval.toIntOrNull() ?: 1).coerceAtLeast(1)
+                        Text(
+                            if (iv == 1) "প্রতিদিন" else "প্রতি " + bn(iv) + " দিন",
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
+
+                // কখন (আগে / পরে)
+                Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                    Text("কখন? (খাবারের আগে / পরে)", style = MaterialTheme.typography.titleSmall)
+                    for (meal in Slots.meals) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.width(96.dp)) {
+                                Text(Slots.mealLabel(meal))
+                                Text(pretty(Slots.mealTime(d, meal)), style = MaterialTheme.typography.bodySmall)
+                            }
+                            val kb = meal + "_BEFORE"
+                            val ka = meal + "_AFTER"
+                            Checkbox(checked = timings.contains(kb), onCheckedChange = { toggle(kb) })
+                            Text("আগে", modifier = Modifier.padding(end = 16.dp))
+                            Checkbox(checked = timings.contains(ka), onCheckedChange = { toggle(ka) })
+                            Text("পরে")
+                        }
                     }
                 }
             }
         }
-        NumField("প্রতিবারে কত " + f.unit + "?", dose) { dose = it }
 
-        Text("কখন? (খাবারের আগে / পরে)", style = MaterialTheme.typography.titleSmall)
-        for (meal in Slots.meals) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.width(96.dp)) {
-                    Text(Slots.mealLabel(meal))
-                    Text(pretty(Slots.mealTime(d, meal)), style = MaterialTheme.typography.bodySmall)
-                }
-                val kb = meal + "_BEFORE"
-                val ka = meal + "_AFTER"
-                Checkbox(checked = timings.contains(kb), onCheckedChange = { toggle(kb) })
-                Text("আগে", modifier = Modifier.padding(end = 16.dp))
-                Checkbox(checked = timings.contains(ka), onCheckedChange = { toggle(ka) })
-                Text("পরে")
-            }
-        }
-
-        NumField("কত দিন পর পর? (১ = প্রতিদিন)", interval) { interval = it }
-
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        // সংরক্ষণ ও বাতিল একদম নিচে
+        Row(
+            Modifier.fillMaxWidth().padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Button(onClick = { save() }, modifier = Modifier.weight(1f)) { Text("সংরক্ষণ") }
             OutlinedButton(onClick = onClose, modifier = Modifier.weight(1f)) { Text("বাতিল") }
             if (!isNew) {
@@ -496,6 +579,42 @@ fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
                 }
             }
         }
+    }
+
+    if (doseDialog) {
+        var t by remember { mutableStateOf(dose) }
+        AlertDialog(
+            onDismissRequest = { doseDialog = false },
+            title = { Text("প্রতিবারে কত " + f.unit + "?") },
+            text = { NumField("", t) { t = it.take(3) } },
+            confirmButton = {
+                TextButton(onClick = {
+                    dose = ((t.toIntOrNull() ?: 1).coerceAtLeast(1)).toString()
+                    doseDialog = false
+                }) { Text("ঠিক আছে") }
+            },
+            dismissButton = { TextButton(onClick = { doseDialog = false }) { Text("বাতিল") } }
+        )
+    }
+    if (intervalDialog) {
+        var t by remember { mutableStateOf(interval) }
+        AlertDialog(
+            onDismissRequest = { intervalDialog = false },
+            title = { Text("কত দিন পর পর?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    NumField("", t) { t = it.take(3) }
+                    Text("১ = প্রতিদিন", style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    interval = ((t.toIntOrNull() ?: 1).coerceAtLeast(1)).toString()
+                    intervalDialog = false
+                }) { Text("ঠিক আছে") }
+            },
+            dismissButton = { TextButton(onClick = { intervalDialog = false }) { Text("বাতিল") } }
+        )
     }
 
     if (confirmDelete) {
@@ -615,33 +734,59 @@ fun PurchaseItemDialog(
     onSave: (PurchaseOverride) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var daysT by remember { mutableStateOf(current.days?.toString() ?: "") }
-    var qtyT by remember { mutableStateOf(current.qty?.toString() ?: "") }
+    // এডিট খুললে ডিফল্ট দিন ও কয়টা লাগবে সেই সংখ্যা বসানো থাকে
+    val startDays = current.days ?: globalDays
+    var daysT by remember { mutableStateOf(if (startDays > 0) startDays.toString() else "") }
+    var qtyEdited by remember { mutableStateOf(current.qty != null) }
+    var qtyT by remember {
+        mutableStateOf(
+            current.qty?.toString() ?: (if (startDays > 0) med.totalNeededFor(startDays).toString() else "")
+        )
+    }
+
+    // দিন বদলালে, কয়টা নিজে না বদলালে, সংখ্যা নিজে নিজে হিসাব হয়
+    fun onDays(v: String) {
+        daysT = v.take(3)
+        if (!qtyEdited) {
+            val dd = daysT.toIntOrNull() ?: 0
+            qtyT = if (dd > 0) med.totalNeededFor(dd).toString() else ""
+        }
+    }
+
+    // ডিফল্টের সমান হলে আলাদা করে ধরে রাখা হয় না, যাতে সাধারণ দিন/হিসাব মেনে চলে
+    fun result(excluded: Boolean): PurchaseOverride {
+        val dd = daysT.toIntOrNull()
+        val days = if (dd != null && dd == globalDays && current.days == null) null else dd
+        val q = qtyT.toIntOrNull()
+        val effDays = dd ?: globalDays
+        val qty = if (q != null && effDays > 0 && q == med.totalNeededFor(effDays)) null else q
+        return PurchaseOverride(days, qty, excluded)
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(med.name) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                NumField(
-                    "কত দিনের কোর্স?" + if (globalDays > 0) " (ফাঁকা = " + bn(globalDays) + " দিন)" else "",
-                    daysT
-                ) { daysT = it.take(3) }
-                NumField("মোট কয়টা লাগবে? (ফাঁকা = নিজে হিসাব)", qtyT) { qtyT = it.take(5) }
+                Text("কত দিনের কোর্স", fontWeight = FontWeight.Bold)
+                NumField("", daysT) { onDays(it) }
+                Text("কয়টা লাগবে", fontWeight = FontWeight.Bold)
+                NumField("", qtyT) { qtyT = it.take(5); qtyEdited = true }
                 if (current.excluded) {
                     OutlinedButton(
-                        onClick = { onSave(PurchaseOverride(daysT.toIntOrNull(), qtyT.toIntOrNull(), false)) },
+                        onClick = { onSave(result(false)) },
                         modifier = Modifier.fillMaxWidth()
                     ) { Text("↩️ তালিকায় ফিরিয়ে আনুন") }
                 } else {
                     OutlinedButton(
-                        onClick = { onSave(PurchaseOverride(daysT.toIntOrNull(), qtyT.toIntOrNull(), true)) },
+                        onClick = { onSave(result(true)) },
                         modifier = Modifier.fillMaxWidth()
                     ) { Text("🚫 তালিকা থেকে বাদ দিন", color = Color(0xFFC62828)) }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(PurchaseOverride(daysT.toIntOrNull(), qtyT.toIntOrNull(), current.excluded)) }) { Text("সংরক্ষণ") }
+            TextButton(onClick = { onSave(result(current.excluded)) }) { Text("সংরক্ষণ") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("বাতিল") } }
     )
@@ -1078,9 +1223,12 @@ fun SettingsScreen() {
         }
     }
 
+    var showAbout by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .weight(1f)
+            .fillMaxWidth()
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1185,13 +1333,17 @@ fun SettingsScreen() {
             )
         }
 
-        var showAbout by remember { mutableStateOf(false) }
-        OutlinedButton(onClick = { showAbout = true }, modifier = Modifier.fillMaxWidth()) {
-            Text("ℹ️ ABOUT")
-        }
-        if (showAbout) {
-            AboutDialog { showAbout = false }
-        }
+    }
+    // ABOUT বাটন একদম নিচে স্থির
+    OutlinedButton(
+        onClick = { showAbout = true },
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)
+    ) {
+        Text("ℹ️ ABOUT")
+    }
+    }
+    if (showAbout) {
+        AboutDialog { showAbout = false }
     }
 }
 
@@ -1199,7 +1351,7 @@ fun SettingsScreen() {
 
 // এক লাইনে ধরানোর জন্য দরকার হলে লেখা ছোট হয়ে যায়
 @Composable
-private fun OneLineFit(text: String, maxSp: Float, color: Color) {
+private fun OneLineFit(text: androidx.compose.ui.text.AnnotatedString, maxSp: Float, color: Color) {
     var size by remember(text) { mutableStateOf(maxSp) }
     Text(
         text,
@@ -1214,54 +1366,177 @@ private fun OneLineFit(text: String, maxSp: Float, color: Color) {
     )
 }
 
+private class BloodDrop(val x: Float, val speed: Float, val len: Float, val phase: Float, val r: Float)
+
+// উপর থেকে নিচে রক্তের ফোঁটা ঝরে
+@Composable
+private fun BloodRain(modifier: Modifier) {
+    val drops = remember {
+        val rnd = kotlin.random.Random(11)
+        List(28) {
+            BloodDrop(
+                x = rnd.nextFloat(),
+                speed = 0.07f + rnd.nextFloat() * 0.2f,
+                len = 18f + rnd.nextFloat() * 50f,
+                phase = rnd.nextFloat(),
+                r = 1.6f + rnd.nextFloat() * 2.4f
+            )
+        }
+    }
+    var t by remember { mutableStateOf(0f) }
+    LaunchedEffect(Unit) {
+        val start = androidx.compose.runtime.withFrameNanos { it }
+        while (true) {
+            androidx.compose.runtime.withFrameNanos { t = (it - start) / 1_000_000_000f }
+        }
+    }
+    androidx.compose.foundation.Canvas(modifier) {
+        val h = size.height
+        val w = size.width
+        drops.forEach { dr ->
+            val len = dr.len.dp.toPx()
+            val r = dr.r.dp.toPx()
+            val progress = (t * dr.speed + dr.phase) % 1f
+            val y = progress * (h + len) - len
+            val x = dr.x * w
+            drawLine(
+                brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                    colors = listOf(Color(0x00B71C1C), Color(0xFFB71C1C)),
+                    startY = y - len,
+                    endY = y
+                ),
+                start = androidx.compose.ui.geometry.Offset(x, y - len),
+                end = androidx.compose.ui.geometry.Offset(x, y),
+                strokeWidth = r * 0.9f
+            )
+            drawCircle(
+                color = Color(0xFFD32F2F),
+                radius = r,
+                center = androidx.compose.ui.geometry.Offset(x, y)
+            )
+        }
+    }
+}
+
+// একটা লাইন ধীরে ফুটে ওঠে ও একটু উপরে ওঠে
+@Composable
+private fun FadeLine(text: String, show: Boolean, color: Color, bold: Boolean = false) {
+    val a by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (show) 1f else 0f,
+        animationSpec = androidx.compose.animation.core.tween(800),
+        label = "line"
+    )
+    Text(
+        text,
+        color = color,
+        fontSize = 16.sp,
+        fontWeight = if (bold) FontWeight.Bold else FontWeight.Medium,
+        textAlign = TextAlign.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer { alpha = a; translationY = (1f - a) * 28f }
+    )
+}
+
 @Composable
 fun AboutDialog(onClose: () -> Unit) {
     var showProfile by remember { mutableStateOf(false) }
+    val red = Color(0xFFE53935)
+    val lines = listOf(
+        "শহীদ আবরার ফাহাদ, শরিফ ওসমান বিন হাদী এবং" to red,
+        "জুলাই গণঅভ্যুত্থানের সকল শহীদের স্মৃতির প্রতি" to red,
+        "গভীর শ্রদ্ধায় উৎসর্গীকৃত।" to red,
+        "মহান আল্লাহ তাঁদের শহীদ হিসেবে কবুল করুন" to Color.White,
+        "এবং জান্নাতুল ফেরদৌস নসিব করুন।" to Color.White,
+        "আমিন।" to Color.White
+    )
+    // কয়টা লাইন এখন দেখা যাচ্ছে (একটা একটা করে বাড়ে)
+    var shown by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) {
+        delay(600)
+        for (i in 1..lines.size) {
+            shown = i
+            delay(1100)
+        }
+    }
     Dialog(
         onDismissRequest = onClose,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
-        Box(Modifier.fillMaxSize().background(Color(0xFF101010))) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        listOf(Color(0xFF050505), Color(0xFF120404), Color(0xFF3B0808))
+                    )
+                )
+        ) {
+            BloodRain(Modifier.fillMaxSize())
             Column(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp).padding(top = 56.dp, bottom = 24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(20.dp)
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 48.dp, bottom = 90.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    OneLineFit("ভারতীয় আধিপত্যবাদের বিরুদ্ধে প্রতিবাদ ও প্রতিরোধের চেতনায়", 16f, Color.White)
-                    OneLineFit("শহীদ আবরার ফাহাদ ও শরিফ ওসমান বিন হাদী ভাইকে উৎসর্গীকৃত", 16f, Color.White)
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OneLineFit(androidx.compose.ui.text.AnnotatedString("ভারতীয় আধিপত্যবাদের বিরুদ্ধে"), 22f, Color.White)
+                    OneLineFit(
+                        buildAnnotatedString {
+                            withStyle(SpanStyle(color = red)) { append("প্রতিবাদ ও প্রতিরোধের") }
+                            withStyle(SpanStyle(color = Color.White)) { append(" চেতনায়") }
+                        },
+                        22f, Color.White
+                    )
                 }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    listOf(R.drawable.about_1, R.drawable.about_2).forEach { res ->
-                        Box(
-                            Modifier
-                                .weight(1f)
-                                .aspectRatio(0.8f)
-                                .border(4.dp, Color(0xFFD32F2F))
-                        ) {
-                            Image(
-                                painter = painterResource(res),
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize().padding(4.dp)
+                Box(
+                    Modifier
+                        .padding(top = 10.dp)
+                        .fillMaxWidth(0.55f)
+                        .height(2.dp)
+                        .background(
+                            androidx.compose.ui.graphics.Brush.horizontalGradient(
+                                listOf(Color.Transparent, red, Color.Transparent)
                             )
-                        }
+                        )
+                )
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 22.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)
+                ) {
+                    listOf(R.drawable.about_1, R.drawable.about_2).forEach { res ->
+                        Image(
+                            painter = painterResource(res),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.weight(1f).aspectRatio(0.8f)
+                        )
                     }
                 }
-                Text(
-                    "মোঃ জাহাঙ্গীর আলম জীবন",
-                    color = Color(0xFF80CBC4),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 22.sp,
-                    textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
-                    modifier = Modifier.clickable { showProfile = true }.padding(8.dp)
-                )
-                Text("ভার্শন: ২৫-১০-২৬_০৮", color = Color.Gray, fontSize = 12.sp)
+                Column(
+                    Modifier.fillMaxWidth().padding(top = 26.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    lines.forEachIndexed { i, (txt, col) ->
+                        FadeLine(txt, shown > i, col, bold = i == lines.size - 1)
+                    }
+                }
             }
-            TextButton(
-                onClick = onClose,
-                modifier = Modifier.align(Alignment.TopEnd).padding(top = 24.dp, end = 8.dp)
-            ) { Text("✕ বন্ধ", color = Color.White, fontWeight = FontWeight.Bold) }
+            // নাম একদম নিচে
+            Text(
+                "মোঃ জাহাঙ্গীর আলম জীবন",
+                color = Color(0xFF80CBC4),
+                fontWeight = FontWeight.Bold,
+                fontSize = 22.sp,
+                textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 24.dp)
+                    .clickable { showProfile = true }
+                    .padding(8.dp)
+            )
         }
     }
     if (showProfile) ProfileDialog { showProfile = false }
@@ -1277,7 +1552,7 @@ fun ProfileDialog(onClose: () -> Unit) {
     ) {
         Box(Modifier.fillMaxSize().background(Color(0xFF071226))) {
             androidx.compose.ui.viewinterop.AndroidView(
-                modifier = Modifier.fillMaxSize().padding(top = 56.dp),
+                modifier = Modifier.fillMaxSize().padding(top = 32.dp),
                 factory = { c ->
                     android.webkit.WebView(c).apply {
                         setBackgroundColor(android.graphics.Color.parseColor("#071226"))
@@ -1302,10 +1577,7 @@ fun ProfileDialog(onClose: () -> Unit) {
                     }
                 }
             )
-            TextButton(
-                onClick = onClose,
-                modifier = Modifier.align(Alignment.TopStart).padding(top = 24.dp, start = 8.dp)
-            ) { Text("← পেছনে", color = Color.White, fontWeight = FontWeight.Bold) }
+
         }
     }
 }
