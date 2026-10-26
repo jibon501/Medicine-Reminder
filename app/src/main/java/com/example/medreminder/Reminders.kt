@@ -21,11 +21,15 @@ import java.time.ZoneId
 
 object Reminders {
     const val CHANNEL = "meds_alarm"
-    const val NAG_MINUTES = 10
-    const val NAG_MAX = 6
+    const val NAG_MINUTES = 5
+    // না খাওয়া পর্যন্ত প্রতি ৫ মিনিটে (সর্বোচ্চ ১২ ঘণ্টা)
+    const val NAG_MAX = 144
 
     // খাবারের আগের ওষুধের নোটিফিকেশন খাবারের সময়ের এত মিনিট আগে আসে
-    const val BEFORE_LEAD = 30
+    const val BEFORE_LEAD = 15
+
+    // খাবারের পরের ওষুধের নোটিফিকেশন খাবারের সময়ের এত মিনিট পরে আসে
+    const val AFTER_LAG = 30
     private const val FLAGS = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
 
     // ---------- helpers ----------
@@ -42,10 +46,10 @@ object Reminders {
         medsFor(d, Slots.mealOf(key) + "_BEFORE", date).isNotEmpty()
 
     // এই স্লটের নোটিফিকেশন ও "খেয়েছি" বাটন যত মিনিটে (মধ্যরাত থেকে) চালু হয়
-    // আগে: খাবারের সময় - BEFORE_LEAD মিনিট, পরে: খাবারের সময়
+    // আগে: খাবারের সময় - BEFORE_LEAD মিনিট, পরে: খাবারের সময় + AFTER_LAG মিনিট
     fun activeFromMinutes(d: AppData, key: String): Int {
         val meal = toMin(Slots.mealTime(d, Slots.mealOf(key)))
-        return if (Slots.isBefore(key)) (meal - BEFORE_LEAD).coerceAtLeast(0) else meal
+        return if (Slots.isBefore(key)) (meal - BEFORE_LEAD).coerceAtLeast(0) else (meal + AFTER_LAG).coerceAtMost(24 * 60 - 1)
     }
 
     fun alarmMinutes(d: AppData, key: String): Int = activeFromMinutes(d, key)
@@ -288,13 +292,12 @@ object Reminders {
         cancelNotif(ctx, key)
         cancelNag(ctx, key)
 
-        // ক্রমে পরের স্লট চালু হলো: একই বেলার "পরে" হলে সাথে সাথে নোটিফিকেশন,
-        // পরের বেলার হলে তার সময় হয়ে গিয়ে থাকলে নোটিফিকেশন
+        // ক্রমে পরের স্লট চালু হলো: তার নোটিফিকেশনের সময় হয়ে গিয়ে থাকলে এখনই নোটিফিকেশন,
+        // নইলে নির্ধারিত সময়ে আসবে
         val after = Store.data
         val next = nextSlot(after, key, date)
         if (next != null) {
-            val sameMeal = Slots.mealOf(next) == Slots.mealOf(key)
-            if (sameMeal || isActive(after, next, date)) fire(ctx, next, dateStr, 0)
+            if (isActive(after, next, date)) fire(ctx, next, dateStr, 0)
         }
         scheduleAll(ctx)
         return true

@@ -9,6 +9,7 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -60,6 +61,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -520,6 +527,7 @@ fun PurchaseListDialog(disease: Disease, onDismiss: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 NumField("কত দিনের ওষুধ কিনতে চান?", daysText) { daysText = it.take(3) }
+                if (days <= 0) Text("আগে দিন সংখ্যা দিন, তারপর সেভ ও শেয়ার চালু হবে", style = MaterialTheme.typography.bodySmall)
                 Image(
                     bitmap = bmp.asImageBitmap(),
                     contentDescription = "কেনার তালিকা",
@@ -528,6 +536,7 @@ fun PurchaseListDialog(disease: Disease, onDismiss: () -> Unit) {
                 )
                 if (PurchaseList.canSaveToGallery()) {
                     OutlinedButton(
+                        enabled = days > 0,
                         onClick = {
                             if (PurchaseList.saveToGallery(ctx, bmp, disease)) toast(ctx, "গ্যালারিতে সেভ হয়েছে")
                             else toast(ctx, "সেভ করা যায়নি")
@@ -537,7 +546,7 @@ fun PurchaseListDialog(disease: Disease, onDismiss: () -> Unit) {
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { PurchaseList.share(ctx, bmp, disease) }) { Text("📤 শেয়ার") } },
+        confirmButton = { TextButton(enabled = days > 0, onClick = { PurchaseList.share(ctx, bmp, disease) }) { Text("📤 শেয়ার") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("বন্ধ") } }
     )
 }
@@ -603,9 +612,15 @@ fun DiseasesScreen(onNew: () -> Unit, onEdit: (Disease) -> Unit, onAddMed: (Dise
                             modifier = Modifier.fillMaxWidth()
                         )
                         Text("তারিখ: " + prettyDate(ds.date))
-                        Text("প্রেসক্রিপশনের ছবি: " + bn(ds.images.size) + "টি")
                         if (meds.isNotEmpty()) {
-                            Text("ওষুধ: " + meds.joinToString(", ") { it.name })
+                            Text(
+                                buildAnnotatedString {
+                                    withStyle(SpanStyle(color = Color(0xFF6D4C41), fontWeight = FontWeight.Bold)) { append("ওষুধ: ") }
+                                    withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)) {
+                                        append(meds.joinToString(", ") { it.name })
+                                    }
+                                }
+                            )
                         }
                         FlowRow {
                             TextButton(onClick = { onAddMed(ds) }) { Text("+ এই রোগে ওষুধ যোগ") }
@@ -932,6 +947,28 @@ fun SettingsScreen() {
     val ctx = LocalContext.current
     val d = Store.data
 
+    // ব্যাকআপ/রিস্টোরে প্রথমবার স্টোরেজ পারমিশন চাওয়া হয় (Android ১২ বা তার নিচে)। পরে কাজটা চলে
+    var afterPerm by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        val run = afterPerm
+        afterPerm = null
+        run?.invoke()
+    }
+    fun withStorage(action: () -> Unit) {
+        val prefs = ctx.getSharedPreferences("prefs", android.content.Context.MODE_PRIVATE)
+        if (android.os.Build.VERSION.SDK_INT <= 32 && !prefs.getBoolean("storageAsked", false)) {
+            prefs.edit().putBoolean("storageAsked", true).apply()
+            afterPerm = action
+            permLauncher.launch(
+                arrayOf(
+                    android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                    android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+                )
+            )
+        } else {
+            action()
+        }
+    }
     val exporter = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip")
     ) { uri: Uri? ->
@@ -1002,8 +1039,9 @@ fun SettingsScreen() {
                         }
                         Text(
                             "\"খাবারের আগের\" ওষুধের নোটিফিকেশন খাবারের সময়ের " + bn(Reminders.BEFORE_LEAD) +
-                                " মিনিট আগে আসবে। না খেলে প্রতি " + bn(Reminders.NAG_MINUTES) +
-                                " মিনিট পর পর আবার মনে করানো হবে।",
+                                " মিনিট আগে, আর \"খাবারের পরের\" ওষুধের নোটিফিকেশন খাবারের সময়ের " + bn(Reminders.AFTER_LAG) +
+                                " মিনিট পরে আসবে। না খাওয়া পর্যন্ত প্রতি " + bn(Reminders.NAG_MINUTES) +
+                                " মিনিট পর পর আবার আসবে।",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -1013,11 +1051,11 @@ fun SettingsScreen() {
         }
 
         Button(
-            onClick = { exporter.launch("medicine-backup-" + LocalDate.now().toString() + ".zip") },
+            onClick = { withStorage { exporter.launch("medicine-backup-" + LocalDate.now().toString() + ".zip") } },
             modifier = Modifier.fillMaxWidth()
         ) { Text("☁️ ব্যাকআপ") }
         OutlinedButton(
-            onClick = { importer.launch(arrayOf("*/*")) },
+            onClick = { withStorage { importer.launch(arrayOf("*/*")) } },
             modifier = Modifier.fillMaxWidth()
         ) { Text("📥 রিস্টোর") }
 
@@ -1056,20 +1094,49 @@ fun SettingsScreen() {
             Text("ℹ️ ABOUT")
         }
         if (showAbout) {
-            AlertDialog(
+            Dialog(
                 onDismissRequest = { showAbout = false },
-                title = { Text("ওষুধের রিমাইন্ডার") },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("ভার্শন: ২৫-১০-২৬_০৬")
-                        Column {
-                            Text("ডেভেলপার: জাহাঙ্গীর আলম (AI এর সহায়তায়)")
-                            Text("চরিতাবাড়ী, আদিতমারী, লালমনিরহাট")
-                        }
+                properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+            ) {
+                Box(Modifier.fillMaxSize().background(Color.Black)) {
+                    Image(
+                        painter = painterResource(R.drawable.p1),
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    TextButton(
+                        onClick = { showAbout = false },
+                        modifier = Modifier.align(Alignment.TopEnd).padding(top = 24.dp, end = 8.dp)
+                    ) { Text("✕ বন্ধ", color = Color.White, fontWeight = FontWeight.Bold) }
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .background(Color(0xCC000000))
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
                         Text(
-                            "📞 মোবাইল: ০১৭৬৭০৮০৬৬৬",
-                            color = MaterialTheme.colorScheme.primary,
+                            "মোঃ জাহাঙ্গীর আলম জীবন",
+                            color = Color(0xFF80CBC4),
                             fontWeight = FontWeight.Bold,
+                            fontSize = 20.sp,
+                            textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+                            modifier = Modifier.clickable {
+                                try {
+                                    ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://jibon501.github.io/my-id/")))
+                                } catch (e: Exception) {
+                                    toast(ctx, "পেজ খোলা যায়নি")
+                                }
+                            }
+                        )
+                        Text("চরিতাবাড়ী, আদিতমারী, লালমনিরহাট", color = Color.White, fontSize = 14.sp)
+                        Text(
+                            "📞 ০১৭৬৭০৮০৬৬৬",
+                            color = Color.White,
+                            fontSize = 14.sp,
                             modifier = Modifier.clickable {
                                 try {
                                     ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:01767080666")))
@@ -1078,11 +1145,10 @@ fun SettingsScreen() {
                                 }
                             }
                         )
-                        Text("ইমেইল: jibonr8@gmail.com")
+                        Text("ইমেইল: jibonr8@gmail.com · ভার্শন: ২৫-১০-২৬_০৭", color = Color.LightGray, fontSize = 12.sp)
                     }
-                },
-                confirmButton = { TextButton(onClick = { showAbout = false }) { Text("বন্ধ") } }
-            )
+                }
+            }
         }
     }
 }
