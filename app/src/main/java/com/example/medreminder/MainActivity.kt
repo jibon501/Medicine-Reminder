@@ -182,11 +182,7 @@ fun AppRoot() {
                         when (tab) {
                             0 -> TodayScreen()
                             1 -> MedsScreen(
-                                onNew = {
-                                    val cur = Store.data.currentDiseaseId
-                                    val ok = Store.data.diseases.any { it.id == cur }
-                                    editMed = newMedicine(if (ok) cur else "")
-                                },
+                                onNew = { did -> editMed = newMedicine(did) },
                                 onEdit = { editMed = it }
                             )
                             2 -> DiseasesScreen(

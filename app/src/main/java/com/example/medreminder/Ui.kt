@@ -6,6 +6,7 @@ import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -57,6 +58,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.ImageBitmap
@@ -245,13 +247,32 @@ private fun SlotPane(
 
 // ------------------------------------------------------------------ medicines
 
+// "জ্বর" -> "জ্বরের ঔষধ", "ঠান্ডা" -> "ঠান্ডার ঔষধ"
+fun diseaseMedTitle(name: String): String {
+    val n = name.trim()
+    if (n.isEmpty()) return "ঔষধ"
+    val last = n.last()
+    val suffix = when {
+        last in 'a'..'z' || last in 'A'..'Z' || last.isDigit() -> "-এর"
+        last in "ািীুূেৈোৌঅআইঈউঊঋএঐওঔ" -> "র"
+        else -> "ের"
+    }
+    return n + suffix + " ঔষধ"
+}
+
 @Composable
-fun MedsScreen(onNew: () -> Unit, onEdit: (Medicine) -> Unit) {
+fun MedsScreen(onNew: (String) -> Unit, onEdit: (Medicine) -> Unit) {
     val ctx = LocalContext.current
     val d = Store.data
     // কোন কোন ওষুধের ডিটেলস খোলা আছে (বাকিগুলো মিনিমাইজ)
     var open by remember { mutableStateOf(setOf<String>()) }
     var deleteFor by remember { mutableStateOf<Medicine?>(null) }
+    // কোন রোগের বাটন খোলা আছে: null = বাটনের তালিকা, "" = অন্যান্য ওষুধ, নইলে রোগের id
+    var selRaw by rememberSaveable { mutableStateOf<String?>(null) }
+    val diseaseIds = d.diseases.map { it.id }.toSet()
+    val raw: String? = selRaw
+    val sel: String? = if (raw != null && raw != "" && !diseaseIds.contains(raw)) null else raw
+    BackHandler(enabled = sel != null) { selRaw = null; open = emptySet() }
     deleteFor?.let { dm ->
         AlertDialog(
             onDismissRequest = { deleteFor = null },
@@ -267,16 +288,68 @@ fun MedsScreen(onNew: () -> Unit, onEdit: (Medicine) -> Unit) {
             dismissButton = { TextButton(onClick = { deleteFor = null }) { Text("না") } }
         )
     }
+    if (sel == null) {
+        // রোগের নাম অনুযায়ী বাটন: নতুন রোগ সবার উপরে
+        val others = d.medicines.filter { it.diseaseId !in diseaseIds }
+        Column(Modifier.fillMaxSize()) {
+            LazyColumn(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (d.diseases.isEmpty() && others.isEmpty()) {
+                    item { Text("এখনও কোনো ওষুধ নেই।", modifier = Modifier.padding(top = 8.dp)) }
+                }
+                items(d.diseases.reversed(), key = { it.id }) { ds ->
+                    val n = d.medicines.count { it.diseaseId == ds.id }
+                    Button(
+                        onClick = { selRaw = ds.id; open = emptySet() },
+                        modifier = Modifier.fillMaxWidth().height(52.dp)
+                    ) { Text(diseaseMedTitle(ds.name) + " (" + bn(n) + ")", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+                }
+                if (others.isNotEmpty()) {
+                    item {
+                        Button(
+                            onClick = { selRaw = ""; open = emptySet() },
+                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.secondary
+                            ),
+                            modifier = Modifier.fillMaxWidth().height(52.dp)
+                        ) { Text("অন্যান্য ওষুধ (" + bn(others.size) + ")", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+                    }
+                }
+            }
+            Button(
+                onClick = {
+                    val cur = d.currentDiseaseId
+                    onNew(if (d.diseases.any { it.id == cur }) cur else "")
+                },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
+            ) { Text("+ নতুন ওষুধ যোগ করুন") }
+        }
+        return
+    }
+    val shown = if (sel == "") d.medicines.filter { it.diseaseId !in diseaseIds }
+        else d.medicines.filter { it.diseaseId == sel }
+    val title = if (sel == "") "অন্যান্য ওষুধ"
+        else diseaseMedTitle(d.diseases.firstOrNull { it.id == sel }?.name ?: "")
     Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(onClick = { selRaw = null; open = emptySet() }) { Text("← পিছনে") }
+            Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+        }
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            if (d.medicines.isEmpty()) {
-                item { Text("এখনও কোনো ওষুধ নেই।", modifier = Modifier.padding(top = 8.dp)) }
+            if (shown.isEmpty()) {
+                item { Text("এই তালিকায় এখনও কোনো ওষুধ নেই।", modifier = Modifier.padding(top = 8.dp)) }
             }
-            items(d.medicines, key = { it.id }) { m ->
+            items(shown, key = { it.id }) { m ->
                 val disease = d.diseases.firstOrNull { it.id == m.diseaseId }
                 val f = Forms.of(m.form)
                 val isOpen = open.contains(m.id)
@@ -332,7 +405,7 @@ fun MedsScreen(onNew: () -> Unit, onEdit: (Medicine) -> Unit) {
             }
         }
         Button(
-            onClick = onNew,
+            onClick = { onNew(sel) },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
         ) { Text("+ নতুন ওষুধ যোগ করুন") }
     }
@@ -815,31 +888,29 @@ fun DiseasesScreen(onNew: () -> Unit, onEdit: (Disease) -> Unit, onAddMed: (Dise
     var listFor by remember { mutableStateOf<Disease?>(null) }
     listFor?.let { PurchaseListDialog(it) { listFor = null } }
     Column(Modifier.fillMaxSize()) {
+        // সবার উপরের আয়াত স্থির, স্ক্রল হয় না
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            Text(
+                "\"আর যখন আমি অসুস্থ হই, তখন তিনিই(আল্লাহ) আমাকে আরোগ্য করেন।\"",
+                fontWeight = FontWeight.Bold,
+                fontSize = 17.sp,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.fillMaxWidth().padding(16.dp)
+            )
+        }
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        "\"আর যখন আমি অসুস্থ হই, তখন তিনিই(আল্লাহ) আমাকে আরোগ্য করেন।\"",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 17.sp,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.fillMaxWidth().padding(16.dp)
-                    )
-                }
-            }
             if (d.diseases.isEmpty()) {
                 item { Text("এখনও কোনো রোগ নেই।", modifier = Modifier.padding(top = 8.dp)) }
             }
-            items(d.diseases, key = { it.id }) { ds ->
-                val meds = d.medicines.filter { it.diseaseId == ds.id }
+            items(d.diseases.reversed(), key = { it.id }) { ds ->
                 Card(onClick = { onEdit(ds) }, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
@@ -850,16 +921,6 @@ fun DiseasesScreen(onNew: () -> Unit, onEdit: (Disease) -> Unit, onAddMed: (Dise
                             modifier = Modifier.fillMaxWidth()
                         )
                         Text("তারিখ: " + prettyDate(ds.date))
-                        if (meds.isNotEmpty()) {
-                            Text(
-                                buildAnnotatedString {
-                                    withStyle(SpanStyle(color = Color(0xFF6D4C41), fontWeight = FontWeight.Bold)) { append("ওষুধ: ") }
-                                    withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)) {
-                                        append(meds.joinToString(", ") { it.name })
-                                    }
-                                }
-                            )
-                        }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(onClick = { onAddMed(ds) }, modifier = Modifier.weight(1f)) { Text("ওষুধ +") }
                             OutlinedButton(onClick = { listFor = ds }, modifier = Modifier.weight(1f)) { Text("🛒 কেনার তালিকা") }
@@ -1357,8 +1418,8 @@ private fun FadeWord(text: String, show: Boolean, color: Color) {
     Text(
         text,
         color = color,
-        fontSize = 13.sp,
-        lineHeight = 17.sp,
+        fontSize = 15.sp,
+        lineHeight = 20.sp,
         fontWeight = FontWeight.Medium,
         modifier = Modifier.graphicsLayer { alpha = a; translationY = (1f - a) * 18f }
     )
@@ -1387,7 +1448,7 @@ fun AboutDialog(onClose: () -> Unit) {
     ) {
         androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
             // লেখা ও বাটনের জন্য নিচে জায়গা রেখে বাকিটা পোস্টারের, তাই স্ক্রল লাগে না
-            val posterH = minOf(maxWidth * 1.5f, maxHeight - 200.dp)
+            val posterH = minOf(maxWidth * 1.5f, maxHeight - 250.dp)
             Column(
                 modifier = Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -1407,11 +1468,28 @@ fun AboutDialog(onClose: () -> Unit) {
                     words.forEachIndexed { i, (w, col) -> FadeWord(w, shown > i, col) }
                 }
                 Box(Modifier.weight(1f))
-                // নামের বাটন একদম নিচে
-                androidx.compose.material3.Button(
-                    onClick = { showProfile = true },
-                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFFB71C1C)),
-                    modifier = Modifier.padding(bottom = 20.dp)
+                // নামের গ্লাস বাটন একদম নিচে
+                val glassShape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp)
+                val tint = Color(0xFF26C6DA)
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .padding(bottom = 20.dp)
+                        .clip(glassShape)
+                        .background(
+                            androidx.compose.ui.graphics.Brush.verticalGradient(
+                                listOf(tint.copy(alpha = 0.55f), tint.copy(alpha = 0.18f))
+                            )
+                        )
+                        .border(
+                            1.2.dp,
+                            androidx.compose.ui.graphics.Brush.verticalGradient(
+                                listOf(Color.White.copy(alpha = 0.85f), Color.White.copy(alpha = 0.15f))
+                            ),
+                            glassShape
+                        )
+                        .clickable { showProfile = true }
+                        .padding(horizontal = 28.dp, vertical = 12.dp)
                 ) {
                     Text("মোঃ জাহাঙ্গীর আলম জীবন", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 }
