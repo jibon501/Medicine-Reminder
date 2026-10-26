@@ -221,27 +221,22 @@ private fun SlotPane(
             Reminders.numberedLines(meds).forEach { Text(it, fontSize = fs, lineHeight = fs * 1.2f) }
         }
         if (blocked && !done) Text("আগের ঔষধ আগে নিন", fontSize = 10.sp, color = Color.Gray)
-        // একটাই বাটন: না খেলে "খেয়েছি", খেলে "খাওয়া হয়েছে · খাইনি" (চাপলে আবার না-খাওয়া হয়ে যায়)
-        if (done) {
-            OutlinedButton(
-                onClick = { Reminders.unmarkTaken(ctx, key, todayStr) },
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                modifier = Modifier.fillMaxWidth().height(44.dp)
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(Reminders.doneTitle(meds), fontSize = 13.sp, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
-                    Text(Reminders.undoTitle(meds), fontSize = 11.sp)
-                }
-            }
-        } else {
-            Button(
-                enabled = !blocked,
-                onClick = {
-                    if (!Reminders.markTaken(ctx, key, todayStr)) toast(ctx, "আগের ঔষধ আগে নিন")
-                },
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                modifier = Modifier.fillMaxWidth().height(44.dp)
-            ) { Text(Reminders.takenButtonLabel(meds), fontSize = 13.sp) }
+        // একটাই বাটন, একটাই লেখা: সবসময় শুরুতে লাল "❌ খাইনি"; খেয়ে চাপলে সবুজ "✔ খেয়েছি"; আবার চাপলে আগের অবস্থা
+        val btnColor = if (done) Color(0xFF2E7D32) else Color(0xFFC62828)
+        Button(
+            onClick = {
+                if (done) Reminders.unmarkTaken(ctx, key, todayStr)
+                else if (!Reminders.markTaken(ctx, key, todayStr)) toast(ctx, "আগের ঔষধ আগে নিন")
+            },
+            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = btnColor, contentColor = Color.White),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+            modifier = Modifier.fillMaxWidth().height(48.dp)
+        ) {
+            Text(
+                if (done) Reminders.yesLabel(meds) else Reminders.noLabel(meds),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }

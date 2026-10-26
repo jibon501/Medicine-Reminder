@@ -112,6 +112,10 @@ object Reminders {
     fun undoTitle(meds: List<Medicine>): String =
         if (eatOnly(meds)) "↩️ খাইনি" else "↩️ নিইনি"
 
+    // আজ ট্যাবের একটাই বাটন: না খেলে লাল "❌ খাইনি", খেলে সবুজ "✔ খেয়েছি"
+    fun yesLabel(meds: List<Medicine>): String = if (eatOnly(meds)) "✔ খেয়েছি" else "✔ নিয়েছি"
+    fun noLabel(meds: List<Medicine>): String = if (eatOnly(meds)) "❌ খাইনি" else "❌ নিইনি"
+
     fun numberedLines(meds: List<Medicine>): List<String> =
         meds.mapIndexed { i, m ->
             bn(i + 1) + ". " + m.name + " — " + m.doseLabel()
