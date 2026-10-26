@@ -251,6 +251,22 @@ fun MedsScreen(onNew: () -> Unit, onEdit: (Medicine) -> Unit) {
     val d = Store.data
     // কোন কোন ওষুধের ডিটেলস খোলা আছে (বাকিগুলো মিনিমাইজ)
     var open by remember { mutableStateOf(setOf<String>()) }
+    var deleteFor by remember { mutableStateOf<Medicine?>(null) }
+    deleteFor?.let { dm ->
+        AlertDialog(
+            onDismissRequest = { deleteFor = null },
+            title = { Text("মুছে ফেলবেন?") },
+            text = { Text(dm.name + " তালিকা থেকে মুছে যাবে।") },
+            confirmButton = {
+                TextButton(onClick = {
+                    Store.update(ctx) { st -> st.copy(medicines = st.medicines.filter { it.id != dm.id }) }
+                    Reminders.scheduleAll(ctx)
+                    deleteFor = null
+                }) { Text("মুছুন") }
+            },
+            dismissButton = { TextButton(onClick = { deleteFor = null }) { Text("না") } }
+        )
+    }
     Column(Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -294,6 +310,10 @@ fun MedsScreen(onNew: () -> Unit, onEdit: (Medicine) -> Unit) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 OutlinedButton(onClick = { onEdit(m) }) { Text("✏️ সম্পাদনা") }
                                 Box(Modifier.weight(1f))
+                                OutlinedButton(onClick = { deleteFor = m }) {
+                                    Text("🗑 মুছুন", color = Color(0xFFC62828))
+                                }
+                                Box(Modifier.weight(1f))
                                 Text(if (m.muted) "🔕" else "🔔")
                                 Switch(
                                     checked = !m.muted,
@@ -333,7 +353,6 @@ fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
     var interval by remember { mutableStateOf(init.intervalDays.toString()) }
     var menu by remember { mutableStateOf(false) }
     var formMenu by remember { mutableStateOf(false) }
-    var confirmDelete by remember { mutableStateOf(false) }
 
     fun toggle(key: String) {
         timings = if (timings.contains(key)) timings - key else timings + key
@@ -573,11 +592,6 @@ fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
         ) {
             Button(onClick = { save() }, modifier = Modifier.weight(1f)) { Text("সংরক্ষণ") }
             OutlinedButton(onClick = onClose, modifier = Modifier.weight(1f)) { Text("বাতিল") }
-            if (!isNew) {
-                TextButton(onClick = { confirmDelete = true }) {
-                    Text("🗑 মুছুন", color = Color(0xFFC62828))
-                }
-            }
         }
     }
 
@@ -614,23 +628,6 @@ fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
                 }) { Text("ঠিক আছে") }
             },
             dismissButton = { TextButton(onClick = { intervalDialog = false }) { Text("বাতিল") } }
-        )
-    }
-
-    if (confirmDelete) {
-        AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            title = { Text("মুছে ফেলবেন?") },
-            text = { Text(init.name + " তালিকা থেকে মুছে যাবে।") },
-            confirmButton = {
-                TextButton(onClick = {
-                    Store.update(ctx) { s -> s.copy(medicines = s.medicines.filter { it.id != init.id }) }
-                    Reminders.scheduleAll(ctx)
-                    confirmDelete = false
-                    onClose()
-                }) { Text("মুছুন") }
-            },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("না") } }
         )
     }
 }
@@ -1366,20 +1363,21 @@ private fun OneLineFit(text: androidx.compose.ui.text.AnnotatedString, maxSp: Fl
     )
 }
 
-private class BloodDrop(val x: Float, val speed: Float, val len: Float, val phase: Float, val r: Float)
+private class BloodSpot(val x: Float, val y: Float, val period: Float, val phase: Float, val r: Float, val drip: Float)
 
-// উপর থেকে নিচে রক্তের ফোঁটা ঝরে
+// স্ক্রিনের নানা জায়গা থেকে ফিকে হয়ে রক্ত ধীরে ফুটে বেরোয়, একটু ছড়ায়, গড়ায়, তারপর মিলিয়ে যায়
 @Composable
 private fun BloodRain(modifier: Modifier) {
-    val drops = remember {
-        val rnd = kotlin.random.Random(11)
-        List(28) {
-            BloodDrop(
-                x = rnd.nextFloat(),
-                speed = 0.07f + rnd.nextFloat() * 0.2f,
-                len = 18f + rnd.nextFloat() * 50f,
+    val spots = remember {
+        val rnd = kotlin.random.Random(23)
+        List(14) {
+            BloodSpot(
+                x = 0.06f + rnd.nextFloat() * 0.88f,
+                y = 0.05f + rnd.nextFloat() * 0.9f,
+                period = 6f + rnd.nextFloat() * 5f,
                 phase = rnd.nextFloat(),
-                r = 1.6f + rnd.nextFloat() * 2.4f
+                r = 22f + rnd.nextFloat() * 38f,
+                drip = 20f + rnd.nextFloat() * 60f
             )
         }
     }
@@ -1391,29 +1389,43 @@ private fun BloodRain(modifier: Modifier) {
         }
     }
     androidx.compose.foundation.Canvas(modifier) {
-        val h = size.height
-        val w = size.width
-        drops.forEach { dr ->
-            val len = dr.len.dp.toPx()
-            val r = dr.r.dp.toPx()
-            val progress = (t * dr.speed + dr.phase) % 1f
-            val y = progress * (h + len) - len
-            val x = dr.x * w
-            drawLine(
-                brush = androidx.compose.ui.graphics.Brush.verticalGradient(
-                    colors = listOf(Color(0x00B71C1C), Color(0xFFB71C1C)),
-                    startY = y - len,
-                    endY = y
-                ),
-                start = androidx.compose.ui.geometry.Offset(x, y - len),
-                end = androidx.compose.ui.geometry.Offset(x, y),
-                strokeWidth = r * 0.9f
-            )
+        spots.forEach { sp ->
+            val p = (t / sp.period + sp.phase) % 1f
+            // ০..০.৬ ফুটে ওঠা ও বড় হওয়া, ০.৬..০.৮ থেমে থাকা, ০.৮..১ মিলিয়ে যাওয়া
+            val grow = (p / 0.6f).coerceIn(0f, 1f)
+            val ease = grow * grow * (3f - 2f * grow)
+            val fade = if (p < 0.8f) 1f else (1f - (p - 0.8f) / 0.2f)
+            val alpha = (0.75f * ease * fade).coerceIn(0f, 1f)
+            if (alpha <= 0.01f) return@forEach
+            val c = androidx.compose.ui.geometry.Offset(sp.x * size.width, sp.y * size.height)
+            val radius = sp.r.dp.toPx() * (0.25f + 0.75f * ease)
             drawCircle(
-                color = Color(0xFFD32F2F),
-                radius = r,
-                center = androidx.compose.ui.geometry.Offset(x, y)
+                brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                    colors = listOf(
+                        Color(0xFFB71C1C).copy(alpha = alpha),
+                        Color(0xFF7F0000).copy(alpha = alpha * 0.55f),
+                        Color(0x007F0000)
+                    ),
+                    center = c,
+                    radius = radius
+                ),
+                radius = radius,
+                center = c
             )
+            // ছোট একটা ধারা নিচের দিকে গড়ায়
+            val dl = sp.drip.dp.toPx() * ease
+            if (dl > 2f) {
+                drawLine(
+                    brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                        colors = listOf(Color(0xFF8E0000).copy(alpha = alpha * 0.9f), Color(0x008E0000)),
+                        startY = c.y,
+                        endY = c.y + dl
+                    ),
+                    start = c,
+                    end = androidx.compose.ui.geometry.Offset(c.x, c.y + dl),
+                    strokeWidth = 3.dp.toPx()
+                )
+            }
         }
     }
 }
@@ -1473,50 +1485,60 @@ fun AboutDialog(onClose: () -> Unit) {
                 )
         ) {
             BloodRain(Modifier.fillMaxSize())
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp)
-                    .padding(top = 48.dp, bottom = 90.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OneLineFit(androidx.compose.ui.text.AnnotatedString("ভারতীয় আধিপত্যবাদের বিরুদ্ধে"), 22f, Color.White)
-                    OneLineFit(
-                        buildAnnotatedString {
-                            withStyle(SpanStyle(color = red)) { append("প্রতিবাদ ও প্রতিরোধের") }
-                            withStyle(SpanStyle(color = Color.White)) { append(" চেতনায়") }
-                        },
-                        22f, Color.White
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+                // ছবি দুটো স্ক্রিনের ঠিক মাঝখানে। উচ্চতা বেশি না হয় সেজন্য সীমা দেওয়া
+                val gap = 12.dp
+                val sidePad = 16.dp
+                val byWidth = (maxWidth - sidePad * 2 - gap) / 2
+                val imgW = minOf(byWidth, maxHeight * 0.28f * 0.8f)
+                val imgH = imgW / 0.8f
+
+                Column(
+                    Modifier.fillMaxWidth().padding(top = 48.dp, start = sidePad, end = sidePad),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OneLineFit(androidx.compose.ui.text.AnnotatedString("ভারতীয় আধিপত্যবাদের বিরুদ্ধে"), 22f, Color.White)
+                        OneLineFit(
+                            buildAnnotatedString {
+                                withStyle(SpanStyle(color = red)) { append("প্রতিবাদ ও প্রতিরোধের") }
+                                withStyle(SpanStyle(color = Color.White)) { append(" চেতনায়") }
+                            },
+                            22f, Color.White
+                        )
+                    }
+                    Box(
+                        Modifier
+                            .padding(top = 10.dp)
+                            .fillMaxWidth(0.55f)
+                            .height(2.dp)
+                            .background(
+                                androidx.compose.ui.graphics.Brush.horizontalGradient(
+                                    listOf(Color.Transparent, red, Color.Transparent)
+                                )
+                            )
                     )
                 }
-                Box(
-                    Modifier
-                        .padding(top = 10.dp)
-                        .fillMaxWidth(0.55f)
-                        .height(2.dp)
-                        .background(
-                            androidx.compose.ui.graphics.Brush.horizontalGradient(
-                                listOf(Color.Transparent, red, Color.Transparent)
-                            )
-                        )
-                )
+
                 Row(
-                    Modifier.fillMaxWidth().padding(top = 22.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)
+                    Modifier.align(Alignment.Center).fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(gap, Alignment.CenterHorizontally)
                 ) {
                     listOf(R.drawable.about_1, R.drawable.about_2).forEach { res ->
                         Image(
                             painter = painterResource(res),
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
-                            modifier = Modifier.weight(1f).aspectRatio(0.8f)
+                            modifier = Modifier.width(imgW).height(imgH)
                         )
                     }
                 }
+
                 Column(
-                    Modifier.fillMaxWidth().padding(top = 26.dp),
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .padding(top = maxHeight / 2 + imgH / 2 + 22.dp, start = sidePad, end = sidePad),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     lines.forEachIndexed { i, (txt, col) ->
