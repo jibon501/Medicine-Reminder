@@ -39,6 +39,7 @@ jobs:
           name: MedicineReminder-apk
           path: MedicineReminder.apk
 
+      # রিলিজ এই রিপোতেই হয়। রিপো private থাকলে শুধু আপনি দেখবেন, পরে public করলে সবাই APK নামাতে পারবে
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
