@@ -179,24 +179,14 @@ fun TodayScreen() {
             val fs = if (most > 4) 11.sp else if (most > 2) 12.sp else 14.sp
             Card(modifier = Modifier.fillMaxWidth().weight((most + 3).toFloat())) {
                 Column(Modifier.fillMaxSize().padding(8.dp)) {
-                    // সকাল/দুপুর/রাত প্রথম ঘরের মাঝখানে, ঘড়ির সময় দ্বিতীয় ঘরের মাঝখানে; মাঝে একটা গ্যাপ
-                    Row(Modifier.fillMaxWidth()) {
-                        Text(
-                            (MEAL_EMOJI[meal] ?: "") + " " + Slots.mealLabel(meal),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.weight(1f)
-                        )
-                        androidx.compose.foundation.layout.Spacer(Modifier.width(17.dp))
-                        Text(
-                            pretty(Slots.mealTime(d, meal)),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                    // "🌅 সকাল ৮:০০" দুই ঘরের ঠিক মাঝখানে
+                    Text(
+                        (MEAL_EMOJI[meal] ?: "") + " " + pretty(Slots.mealTime(d, meal)),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                     Row(Modifier.fillMaxSize().padding(top = 4.dp)) {
                         SlotPane(kb, "খাবারের আগে", visible(kb), d, today, now, fs, false, Modifier.weight(1f).fillMaxSize())
                         Box(Modifier.width(17.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
@@ -225,13 +215,13 @@ private fun SlotPane(
     val ctx = LocalContext.current
     val todayStr = today.toString()
     Column(modifier) {
-        // "খাবারের পরে" ডানপ্রান্তে
+        // "খাবারের আগে/পরে" নিজের ঘরের মাঝখানে
         Text(
             title,
             fontWeight = FontWeight.Bold,
             fontSize = fs,
             color = MaterialTheme.colorScheme.primary,
-            textAlign = if (titleEnd) TextAlign.End else TextAlign.Start,
+            textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth()
         )
         if (!show) {

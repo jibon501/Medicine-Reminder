@@ -38,6 +38,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -65,6 +68,31 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         Store.reload(this)
+    }
+}
+
+// "আজ" ট্যাবের আইকন: আজকের মাস ও তারিখসহ ছোট ক্যালেন্ডার (যেমন OCT ২৭)
+@Composable
+fun TodayCalendarIcon() {
+    val today = LocalDate.now()
+    val mon = today.month.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH).uppercase()
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)
+    Column(
+        modifier = Modifier
+            .size(width = 32.dp, height = 34.dp)
+            .clip(shape)
+            .background(Color.White)
+            .border(1.5.dp, Color(0xFFB0BEC5), shape)
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.fillMaxWidth().height(12.dp).background(Color(0xFFE53935))
+        ) {
+            Text(mon, fontSize = 8.sp, lineHeight = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        }
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+            Text(bn(today.dayOfMonth), fontSize = 15.sp, lineHeight = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF212121))
+        }
     }
 }
 
@@ -179,14 +207,18 @@ fun AppRoot() {
                                     ),
                                     icon = {
                                         Box(
+                                            contentAlignment = Alignment.Center,
                                             modifier = Modifier
+                                                .height(44.dp)
                                                 .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
                                                 .background(
                                                     if (tab == i) MaterialTheme.colorScheme.primaryContainer
                                                     else Color.Transparent
                                                 )
                                                 .padding(horizontal = 4.dp)
-                                        ) { Text(t.first, fontSize = 28.sp) }
+                                        ) {
+                                            if (i == 0) TodayCalendarIcon() else Text(t.first, fontSize = 28.sp)
+                                        }
                                     },
                                     label = { Text(t.second, fontSize = 11.sp) }
                                 )
