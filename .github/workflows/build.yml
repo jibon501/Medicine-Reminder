@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -43,6 +43,6 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: build-${{ github.run_number }}
-          name: Medicine Reminder build ${{ github.run_number }}
+          tag_name: v1.${{ github.run_number }}
+          name: Medicine Reminder v1.${{ github.run_number }}
           files: MedicineReminder.apk
