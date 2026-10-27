@@ -84,6 +84,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -437,7 +443,9 @@ fun MedsScreen(onNew: (String) -> Unit, onEdit: (Medicine) -> Unit) {
 fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
     val ctx = LocalContext.current
     val d = Store.data
-    val isNew = d.medicines.none { it.id == init.id }
+    // নতুন ঔষধ যোগের মোড শুরুতেই ঠিক হয়ে থাকে। সংরক্ষণের পর ফর্ম ফাঁকা হয়ে আবার নতুন ঔষধ যোগ করা যায়
+    val isNew = remember { d.medicines.none { it.id == init.id } }
+    var cur by remember { mutableStateOf(init) }
 
     var name by remember { mutableStateOf(init.name) }
     var form by remember { mutableStateOf(init.form) }
@@ -449,12 +457,28 @@ fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     var formMenu by remember { mutableStateOf(false) }
 
+    val scroll = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    var viewportH by remember { mutableStateOf(0) }
+    var nameTop by remember { mutableStateOf(0) }
+    var mealBottom by remember { mutableStateOf(0) }
+    var nameFocused by remember { mutableStateOf(false) }
+
+    // নামের ঘরে লেখার সময় কিবোর্ড উঠলে স্ক্রল করে নিচের ঘরগুলো (খাবারের আগে/পরে) উপরে তুলে আনে।
+    // নামের ঘরটা যেন উপরে লুকিয়ে না যায়, তাই নামের ঘরের মাথার বেশি উপরে ওঠে না
+    LaunchedEffect(nameFocused) {
+        if (nameFocused) {
+            delay(450)
+            scroll.animateScrollTo(minOf(maxOf(mealBottom - viewportH, 0), nameTop))
+        }
+    }
+
     fun toggle(key: String) {
         timings = if (timings.contains(key)) timings - key else timings + key
     }
 
     val f = Forms.of(form)
-    val preview = init.copy(
+    val preview = cur.copy(
         dose = (dose.toIntOrNull() ?: 1).coerceAtLeast(1),
         timings = timings,
         courseDays = 0,
@@ -475,7 +499,7 @@ fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
             form = form,
             diseaseId = diseaseId,
             startDate = start,
-            muted = init.muted
+            muted = cur.muted
         )
         Store.update(ctx) { s ->
             s.copy(
@@ -484,7 +508,27 @@ fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
             )
         }
         Reminders.scheduleAll(ctx)
-        onClose()
+        if (isNew) {
+            // বন্ধ না হয়ে ফাঁকা হবে: নতুন আইডি, বাকি সব শুরুর অবস্থায়
+            toast(ctx, "ঔষধ সংরক্ষণ হয়েছে। নতুন ঔষধ যোগ করুন")
+            cur = init.copy(
+                id = java.util.UUID.randomUUID().toString(),
+                name = "",
+                timings = emptyList(),
+                startDate = LocalDate.now().toString(),
+                muted = false
+            )
+            name = ""
+            form = init.form
+            dose = "1"
+            diseaseId = init.diseaseId
+            timings = emptyList()
+            start = LocalDate.now().toString()
+            interval = "1"
+            scope.launch { scroll.scrollTo(0) }
+        } else {
+            onClose()
+        }
     }
 
     var doseDialog by remember { mutableStateOf(false) }
@@ -531,7 +575,7 @@ fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
             verticalArrangement = Arrangement.Top
         ) {
             Column(
-                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                modifier = Modifier.fillMaxSize().onSizeChanged { viewportH = it.height }.verticalScroll(scroll),
                 verticalArrangement = Arrangement.SpaceEvenly
             ) {
                 // তিনটা বাটন: রোগ · শুরুর তারিখ · ঔষধের ধরন। নিচে শুধু রোগের নাম, তারিখ, ধরনের নাম
@@ -597,13 +641,20 @@ fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
                 }
 
                 // নাম ও পাওয়ার
-                Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .onGloballyPositioned { nameTop = it.positionInParent().y.toInt() }
+                        .padding(vertical = 6.dp)
+                ) {
                     Text("ঔষধের নাম", fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { nameFocused = it.isFocused }
                     )
                     if (suggestions.isNotEmpty()) {
                         Card(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
@@ -659,7 +710,12 @@ fun MedicineEditor(init: Medicine, onClose: () -> Unit) {
                 }
 
                 // কখন (আগে / পরে)
-                Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .onGloballyPositioned { mealBottom = (it.positionInParent().y + it.size.height).toInt() }
+                        .padding(vertical = 6.dp)
+                ) {
                     Text("কখন? (খাবারের আগে / পরে)", style = MaterialTheme.typography.titleSmall)
                     for (meal in Slots.meals) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
