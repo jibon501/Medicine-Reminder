@@ -1,6 +1,8 @@
 package com.example.medreminder
 
+import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioManager
 import android.media.AudioFormat
 import android.media.AudioTrack
 import kotlin.math.PI
@@ -14,9 +16,15 @@ object TabSound {
     private var last: AudioTrack? = null
 
     @Synchronized
-    // volume: ০.০ (নীরব) থেকে ১.০ (ফুল)। ডিফল্ট হালকা (০.২৫)
-    fun play(style: Int, volume: Float = 0.25f) {
-        if (volume <= 0f) return
+    // ফোন সাইলেন্ট বা ভাইব্রেশন মোডে থাকলে true
+    fun isMuted(ctx: Context): Boolean {
+        val am = ctx.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return false
+        return am.ringerMode != AudioManager.RINGER_MODE_NORMAL
+    }
+
+    // volume: ০.০ (নীরব) থেকে ১.০ (ফুল)। ডিফল্ট হালকা (০.২৫)। ফোন সাইলেন্ট/ভাইব্রেশনে বাজে না
+    fun play(ctx: Context, style: Int, volume: Float = 0.25f) {
+        if (volume <= 0f || isMuted(ctx)) return
         try {
             val pcm = cache.getOrPut(style) { synth(style) }
             last?.let { try { it.stop(); it.release() } catch (_: Exception) {} }

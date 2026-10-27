@@ -3,6 +3,9 @@
 package com.example.medreminder
 
 import android.content.Intent
+import androidx.core.content.ContextCompat
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.layout.Spacer
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.Settings
@@ -1428,7 +1431,7 @@ fun SettingsScreen() {
                             val pick = {
                                 Store.update(ctx) { it.copy(tabAnim = i) }
                                 showAnim = false
-                                if (i > 0 && d.tabSound) TabSound.play(i - 1, d.tabVolume)
+                                if (i > 0) TabSound.play(ctx, i - 1, d.tabVolume)
                             }
                             if (d.tabAnim == i) {
                                 Button(onClick = { pick() }, modifier = Modifier.fillMaxWidth()) { Text(label) }
@@ -1441,18 +1444,29 @@ fun SettingsScreen() {
                 confirmButton = { TextButton(onClick = { showAnim = false }) { Text("বন্ধ") } }
             )
         }
-        OutlinedButton(
-            onClick = {
-                val on = !d.tabSound
-                Store.update(ctx) { it.copy(tabSound = on) }
-                if (on && d.tabAnim > 0) TabSound.play(d.tabAnim - 1, d.tabVolume)
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(if (d.tabSound) "🔊 সাউন্ড: চালু" else "🔇 সাউন্ড: বন্ধ")
+        // ভলিউম বার: ভরাট হয়, কম = সবুজ, মাঝারি = হলুদ, ফুল = লাল।
+        // ফোন সাইলেন্ট বা ভাইব্রেশনে থাকলে অটো বন্ধ (ফাঁকা, ধূসর, কাজ করে না)
+        var muted by remember { mutableStateOf(TabSound.isMuted(ctx)) }
+        androidx.compose.runtime.DisposableEffect(Unit) {
+            val rx = object : android.content.BroadcastReceiver() {
+                override fun onReceive(c: android.content.Context?, i: Intent?) {
+                    muted = TabSound.isMuted(ctx)
+                }
+            }
+            ContextCompat.registerReceiver(
+                ctx, rx,
+                android.content.IntentFilter(android.media.AudioManager.RINGER_MODE_CHANGED_ACTION),
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+            onDispose { try { ctx.unregisterReceiver(rx) } catch (_: Exception) {} }
         }
-        // ভলিউম বার (০ থেকে ফুল)
         var vol by remember { mutableStateOf(d.tabVolume) }
+        val shown = if (muted) 0f else vol
+        val barColor = if (shown <= 0.5f)
+            androidx.compose.ui.graphics.lerp(Color(0xFF43A047), Color(0xFFFDD835), shown / 0.5f)
+        else
+            androidx.compose.ui.graphics.lerp(Color(0xFFFDD835), Color(0xFFE53935), (shown - 0.5f) / 0.5f)
+        val barShape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp)
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1461,18 +1475,49 @@ fun SettingsScreen() {
                     MaterialTheme.colorScheme.outline,
                     androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
                 )
-                .padding(horizontal = 16.dp, vertical = 6.dp)
+                .padding(horizontal = 16.dp, vertical = 10.dp)
         ) {
-            Text("ভলিউম")
-            androidx.compose.material3.Slider(
-                value = vol,
-                onValueChange = { vol = it },
-                valueRange = 0f..1f,
-                onValueChangeFinished = {
-                    Store.update(ctx) { it.copy(tabVolume = vol) }
-                    TabSound.play(maxOf(d.tabAnim - 1, 0), vol)
-                }
-            )
+            Text("ভলিউম", color = if (muted) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface)
+            Spacer(Modifier.height(8.dp))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(28.dp)
+                    .clip(barShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .pointerInput(muted) {
+                        if (!muted) {
+                            androidx.compose.foundation.gestures.detectTapGestures { off ->
+                                vol = (off.x / size.width).coerceIn(0f, 1f)
+                                Store.update(ctx) { it.copy(tabVolume = vol) }
+                                TabSound.play(ctx, maxOf(d.tabAnim - 1, 0), vol)
+                            }
+                        }
+                    }
+                    .pointerInput(muted) {
+                        if (!muted) {
+                            androidx.compose.foundation.gestures.detectHorizontalDragGestures(
+                                onDragStart = { off -> vol = (off.x / size.width).coerceIn(0f, 1f) },
+                                onDragEnd = {
+                                    Store.update(ctx) { it.copy(tabVolume = vol) }
+                                    TabSound.play(ctx, maxOf(d.tabAnim - 1, 0), vol)
+                                },
+                                onDragCancel = { Store.update(ctx) { it.copy(tabVolume = vol) } }
+                            ) { change, _ ->
+                                change.consume()
+                                vol = (change.position.x / size.width).coerceIn(0f, 1f)
+                            }
+                        }
+                    }
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth(shown)
+                        .fillMaxHeight()
+                        .clip(barShape)
+                        .background(barColor)
+                )
+            }
         }
 
         // ব্যাকআপ ও রিস্টোর হেল্পের ঠিক উপরে

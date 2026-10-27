@@ -150,7 +150,8 @@ private fun tabTransition(style: Int, forward: Boolean): androidx.compose.animat
 // নিচের বার: বাটন ২৫% ছোট। ট্যাব বদলালে সিলেক্টের শেড এক বাটন থেকে আরেক বাটনে যায়,
 // কীভাবে যাবে তা style ঠিক করে (TAB_ANIMS)
 @Composable
-private fun AnimatedBottomBar(tab: Int, style: Int, sound: Boolean, volume: Float, onSelect: (Int) -> Unit) {
+private fun AnimatedBottomBar(tab: Int, style: Int, volume: Float, onSelect: (Int) -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     val prog = remember { androidx.compose.animation.core.Animatable(1f) }
     var from by remember { mutableFloatStateOf(tab.toFloat()) }
     var to by remember { mutableIntStateOf(tab) }
@@ -164,7 +165,7 @@ private fun AnimatedBottomBar(tab: Int, style: Int, sound: Boolean, volume: Floa
             prog.snapTo(1f)
             return@LaunchedEffect
         }
-        if (sound) TabSound.play(style - 1, volume)
+        TabSound.play(ctx, style - 1, volume)
         prog.snapTo(0f)
         when (style - 1) {
             1 -> prog.animateTo(1f, androidx.compose.animation.core.tween(650, easing = androidx.compose.animation.core.FastOutSlowInEasing))
@@ -348,7 +349,7 @@ fun AppRoot() {
                 // ফোনের ব্যাক: অন্য ট্যাব থেকে আগে ড্যাশ (আজ) এ আসবে, ড্যাশে থাকলে অ্যাপ বন্ধ হবে
                 BackHandler(enabled = tab != 0) { tab = 0 }
                 Scaffold(
-                    bottomBar = { AnimatedBottomBar(tab, Store.data.tabAnim, Store.data.tabSound, Store.data.tabVolume) { tab = it } }
+                    bottomBar = { AnimatedBottomBar(tab, Store.data.tabAnim, Store.data.tabVolume) { tab = it } }
                 ) { pad ->
                     val anim = Store.data.tabAnim
                     androidx.compose.animation.AnimatedContent(

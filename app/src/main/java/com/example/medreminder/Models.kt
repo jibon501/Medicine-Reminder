@@ -191,7 +191,6 @@ data class AppData(
     val theme: String = "system",
     val currentDiseaseId: String = "",
     val tabAnim: Int = 0,
-    val tabSound: Boolean = true,
     val tabVolume: Float = 0.25f
 ) {
     fun toJson(): JSONObject {
@@ -215,7 +214,6 @@ data class AppData(
         o.put("theme", theme)
         o.put("currentDiseaseId", currentDiseaseId)
         o.put("tabAnim", tabAnim)
-        o.put("tabSound", tabSound)
         o.put("tabVol", tabVolume.toDouble())
         return o
     }
@@ -238,7 +236,6 @@ data class AppData(
                 theme = o.optString("theme", "system"),
                 currentDiseaseId = o.optString("currentDiseaseId", ""),
                 tabAnim = o.optInt("tabAnim", 0),
-                tabSound = o.optBoolean("tabSound", true),
                 tabVolume = o.optDouble("tabVol", 0.25).toFloat().coerceIn(0f, 1f)
             )
         }
