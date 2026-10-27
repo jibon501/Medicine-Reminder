@@ -15,17 +15,19 @@ android {
         // প্রতিটা বিল্ডে versionCode বাড়ে (GitHub run number), তাই নতুন APK আগেরটার ওপর আপডেট হিসেবে ইনস্টল হয়
         val run = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0
         versionCode = 100 + run
-        versionName = "2.0." + run
+        versionName = "1." + run
     }
 
     buildTypes {
         // কোড অস্পষ্ট (obfuscate) করার জন্য। GitHub Actions debug বিল্ড করে, তাই debug-এও চালু
         release {
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
         }
         debug {
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
         }
     }
