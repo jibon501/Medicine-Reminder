@@ -5,6 +5,8 @@ package com.example.medreminder
 import android.content.Intent
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Spacer
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -1487,7 +1489,7 @@ fun SettingsScreen() {
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .pointerInput(muted) {
                         if (!muted) {
-                            androidx.compose.foundation.gestures.detectTapGestures { off ->
+                            detectTapGestures { off ->
                                 vol = (off.x / size.width).coerceIn(0f, 1f)
                                 Store.update(ctx) { it.copy(tabVolume = vol) }
                                 TabSound.play(ctx, maxOf(d.tabAnim - 1, 0), vol)
@@ -1496,7 +1498,7 @@ fun SettingsScreen() {
                     }
                     .pointerInput(muted) {
                         if (!muted) {
-                            androidx.compose.foundation.gestures.detectHorizontalDragGestures(
+                            detectHorizontalDragGestures(
                                 onDragStart = { off -> vol = (off.x / size.width).coerceIn(0f, 1f) },
                                 onDragEnd = {
                                     Store.update(ctx) { it.copy(tabVolume = vol) }
