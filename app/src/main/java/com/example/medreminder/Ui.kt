@@ -1349,42 +1349,6 @@ fun SettingsScreen() {
             }
         }
 
-        // ট্যাব বদলের অ্যানিমেশন বেছে নেওয়ার বাটন (নিচের সিলেক্ট বক্স ও মূল স্ক্রিন, দুটোতেই কাজ করে)
-        var showAnim by remember { mutableStateOf(false) }
-        OutlinedButton(onClick = { showAnim = true }, modifier = Modifier.fillMaxWidth()) {
-            Text("🎞 ট্যাব অ্যানিমেশন: " + TAB_ANIMS.getOrElse(d.tabAnim) { TAB_ANIMS[0] })
-        }
-        if (showAnim) {
-            AlertDialog(
-                onDismissRequest = { showAnim = false },
-                title = { Text("ট্যাব অ্যানিমেশন") },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        TAB_ANIMS.forEachIndexed { i, label ->
-                            if (d.tabAnim == i) {
-                                Button(onClick = { Store.update(ctx) { it.copy(tabAnim = i) }; showAnim = false; if (d.tabSound) TabSound.play(i) }, modifier = Modifier.fillMaxWidth()) { Text(label) }
-                            } else {
-                                OutlinedButton(onClick = { Store.update(ctx) { it.copy(tabAnim = i) }; showAnim = false; if (d.tabSound) TabSound.play(i) }, modifier = Modifier.fillMaxWidth()) { Text(label) }
-                            }
-                        }
-                    }
-                },
-                confirmButton = { TextButton(onClick = { showAnim = false }) { Text("বন্ধ") } }
-            )
-        }
-
-        // অ্যানিমেশনের সাউন্ড চালু/বন্ধ
-        OutlinedButton(
-            onClick = {
-                val on = !d.tabSound
-                Store.update(ctx) { it.copy(tabSound = on) }
-                if (on) TabSound.play(d.tabAnim)
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(if (d.tabSound) "🔊 অ্যানিমেশনের সাউন্ড: চালু" else "🔇 অ্যানিমেশনের সাউন্ড: বন্ধ")
-        }
-
         var showMeals by remember { mutableStateOf(false) }
         OutlinedButton(onClick = { showMeals = true }, modifier = Modifier.fillMaxWidth()) {
             Text("🍽 খাবারের সময়")
@@ -1448,6 +1412,55 @@ fun SettingsScreen() {
             },
             modifier = Modifier.fillMaxWidth()
         ) { Text("🔋 ব্যাটারি সেভার থেকে অ্যাপটি বাদ দিন") }
+
+        // অ্যানিমেশন বেছে নেওয়া + সাউন্ড চালু/বন্ধ + ভলিউম (ব্যাকআপ বাটনের ঠিক উপরে)
+        var showAnim by remember { mutableStateOf(false) }
+        OutlinedButton(onClick = { showAnim = true }, modifier = Modifier.fillMaxWidth()) {
+            Text("🎞 অ্যানিমেশন: " + TAB_ANIMS.getOrElse(d.tabAnim) { TAB_ANIMS[0] })
+        }
+        if (showAnim) {
+            AlertDialog(
+                onDismissRequest = { showAnim = false },
+                title = { Text("অ্যানিমেশন") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        TAB_ANIMS.forEachIndexed { i, label ->
+                            val pick = {
+                                Store.update(ctx) { it.copy(tabAnim = i) }
+                                showAnim = false
+                                if (i > 0 && d.tabSound) TabSound.play(i - 1, d.tabVolume)
+                            }
+                            if (d.tabAnim == i) {
+                                Button(onClick = { pick() }, modifier = Modifier.fillMaxWidth()) { Text(label) }
+                            } else {
+                                OutlinedButton(onClick = { pick() }, modifier = Modifier.fillMaxWidth()) { Text(label) }
+                            }
+                        }
+                    }
+                },
+                confirmButton = { TextButton(onClick = { showAnim = false }) { Text("বন্ধ") } }
+            )
+        }
+        OutlinedButton(
+            onClick = {
+                val on = !d.tabSound
+                Store.update(ctx) { it.copy(tabSound = on) }
+                if (on && d.tabAnim > 0) TabSound.play(d.tabAnim - 1, d.tabVolume)
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(if (d.tabSound) "🔊 সাউন্ড: চালু" else "🔇 সাউন্ড: বন্ধ")
+        }
+        OutlinedButton(
+            onClick = {
+                val next = (d.tabVolume + 1) % 3
+                Store.update(ctx) { it.copy(tabVolume = next) }
+                TabSound.play(maxOf(d.tabAnim - 1, 0), next)
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("🔉 সাউন্ডের ভলিউম: " + listOf("কম", "মাঝারি", "বেশি").getOrElse(d.tabVolume) { "কম" })
+        }
 
         // ব্যাকআপ ও রিস্টোর হেল্পের ঠিক উপরে
         OutlinedButton(

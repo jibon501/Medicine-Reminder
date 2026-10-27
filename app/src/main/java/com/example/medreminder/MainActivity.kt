@@ -105,9 +105,11 @@ fun TodayCalendarIcon() {
 }
 
 // ট্যাব অ্যানিমেশনের ধরন (সেটিংস থেকে বদলানো যায়)। ০ = ডিফল্ট (জুম আউট → জুম ইন)
+// ০ = কোনো অ্যানিমেশন নেই (ডিফল্ট)। বাকিগুলো ১ থেকে
 // প্রতিটা ধরন নিচের সিলেক্ট বক্সের চলা এবং মূল স্ক্রিনের ট্রানজিশন, দুটোই ঠিক করে
 val TAB_ANIMS = listOf(
-    "🔍 জুম আউট → ইন (ডিফল্ট)",
+    "🚫 কোনো অ্যানিমেশন নয় (ডিফল্ট)",
+    "🔍 জুম আউট → ইন",
     "🌀 ঘুরতে ঘুরতে",
     "➡️ সোজা লাইনে",
     "🏀 লাফিয়ে (বাউন্স)",
@@ -117,8 +119,10 @@ val TAB_ANIMS = listOf(
 
 // মূল স্ক্রিনের ট্যাব বদলের ট্রানজিশন (নিচের সিলেক্ট বক্সের স্টাইলের সাথে মিল রেখে)
 private fun tabTransition(style: Int, forward: Boolean): androidx.compose.animation.ContentTransform {
+    if (style == 0) return androidx.compose.animation.EnterTransition.None togetherWith
+        androidx.compose.animation.ExitTransition.None
     val d = if (forward) 1 else -1
-    return when (style) {
+    return when (style - 1) {
         1 -> androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(450)) togetherWith
             androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(250))
         2 -> (androidx.compose.animation.slideInHorizontally(androidx.compose.animation.core.tween(380)) { it * d } +
@@ -146,7 +150,7 @@ private fun tabTransition(style: Int, forward: Boolean): androidx.compose.animat
 // নিচের বার: বাটন ২৫% ছোট। ট্যাব বদলালে সিলেক্টের শেড এক বাটন থেকে আরেক বাটনে যায়,
 // কীভাবে যাবে তা style ঠিক করে (TAB_ANIMS)
 @Composable
-private fun AnimatedBottomBar(tab: Int, style: Int, sound: Boolean, onSelect: (Int) -> Unit) {
+private fun AnimatedBottomBar(tab: Int, style: Int, sound: Boolean, volume: Int, onSelect: (Int) -> Unit) {
     val prog = remember { androidx.compose.animation.core.Animatable(1f) }
     var from by remember { mutableFloatStateOf(tab.toFloat()) }
     var to by remember { mutableIntStateOf(tab) }
@@ -155,9 +159,14 @@ private fun AnimatedBottomBar(tab: Int, style: Int, sound: Boolean, onSelect: (I
         // চলতি অবস্থান থেকেই শুরু, তাই মাঝপথে আবার চাপলেও ঝটকা লাগবে না
         from = from + (to - from) * prog.value
         to = tab
-        if (sound) TabSound.play(style)
+        if (style == 0) {
+            // কোনো অ্যানিমেশন নয়: শেড সাথে সাথে নতুন বাটনে বসে, সাউন্ডও নেই
+            prog.snapTo(1f)
+            return@LaunchedEffect
+        }
+        if (sound) TabSound.play(style - 1, volume)
         prog.snapTo(0f)
-        when (style) {
+        when (style - 1) {
             1 -> prog.animateTo(1f, androidx.compose.animation.core.tween(650, easing = androidx.compose.animation.core.FastOutSlowInEasing))
             2 -> prog.animateTo(1f, androidx.compose.animation.core.tween(380, easing = androidx.compose.animation.core.LinearEasing))
             3 -> prog.animateTo(
@@ -178,7 +187,7 @@ private fun AnimatedBottomBar(tab: Int, style: Int, sound: Boolean, onSelect: (I
     val wave = kotlin.math.sin(Math.PI * p.coerceIn(0f, 1f)).toFloat()
     // স্টাইল অনুযায়ী শেডের স্কেল/ঘোরা
     var sx = 1f; var sy = 1f; var rz = 0f; var ry = 0f
-    when (style) {
+    when (style - 1) {
         1 -> { sx = 1f - 0.25f * wave; sy = sx; rz = 360f * p * dir }
         2 -> { }
         3 -> { }
@@ -339,7 +348,7 @@ fun AppRoot() {
                 // ফোনের ব্যাক: অন্য ট্যাব থেকে আগে ড্যাশ (আজ) এ আসবে, ড্যাশে থাকলে অ্যাপ বন্ধ হবে
                 BackHandler(enabled = tab != 0) { tab = 0 }
                 Scaffold(
-                    bottomBar = { AnimatedBottomBar(tab, Store.data.tabAnim, Store.data.tabSound) { tab = it } }
+                    bottomBar = { AnimatedBottomBar(tab, Store.data.tabAnim, Store.data.tabSound, Store.data.tabVolume) { tab = it } }
                 ) { pad ->
                     val anim = Store.data.tabAnim
                     androidx.compose.animation.AnimatedContent(
@@ -364,7 +373,7 @@ fun AppRoot() {
                                 .fillMaxSize()
                                 .graphicsLayer {
                                     val v = st.value
-                                    when (anim) {
+                                    when (anim - 1) {
                                         1 -> { rotationZ = 14f * v; val k = 1f - 0.12f * kotlin.math.abs(v); scaleX = k; scaleY = k }
                                         4 -> { rotationY = 90f * v; cameraDistance = 12f * density }
                                         else -> {}

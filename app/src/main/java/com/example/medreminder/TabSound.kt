@@ -14,7 +14,8 @@ object TabSound {
     private var last: AudioTrack? = null
 
     @Synchronized
-    fun play(style: Int) {
+    // level: ০ = কম (ডিফল্ট), ১ = মাঝারি, ২ = বেশি
+    fun play(style: Int, level: Int = 0) {
         try {
             val pcm = cache.getOrPut(style) { synth(style) }
             last?.let { try { it.stop(); it.release() } catch (_: Exception) {} }
@@ -37,6 +38,7 @@ object TabSound {
                 .setTransferMode(AudioTrack.MODE_STATIC)
                 .build()
             t.write(pcm, 0, pcm.size)
+            t.setVolume(when (level) { 1 -> 0.6f; 2 -> 1f; else -> 0.25f })
             t.play()
             last = t
         } catch (_: Exception) {
