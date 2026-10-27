@@ -22,8 +22,6 @@ import kotlinx.coroutines.delay
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -43,6 +41,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.core.content.ContextCompat
 import java.time.LocalDate
 import java.util.UUID
@@ -76,22 +82,96 @@ class MainActivity : ComponentActivity() {
 fun TodayCalendarIcon() {
     val today = LocalDate.now()
     val mon = today.month.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH).uppercase()
-    val shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(4.5.dp)
     Column(
         modifier = Modifier
-            .size(width = 32.dp, height = 34.dp)
+            .size(width = 24.dp, height = 25.5.dp)
             .clip(shape)
             .background(Color.White)
-            .border(1.5.dp, Color(0xFFB0BEC5), shape)
+            .border(1.1.dp, Color(0xFFB0BEC5), shape)
     ) {
         Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier.fillMaxWidth().height(12.dp).background(Color(0xFFE53935))
+            modifier = Modifier.fillMaxWidth().height(9.dp).background(Color(0xFFE53935))
         ) {
-            Text(mon, fontSize = 8.sp, lineHeight = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Text(mon, fontSize = 6.sp, lineHeight = 6.sp, fontWeight = FontWeight.Bold, color = Color.White)
         }
         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-            Text(bn(today.dayOfMonth), fontSize = 15.sp, lineHeight = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF212121))
+            Text(bn(today.dayOfMonth), fontSize = 11.25.sp, lineHeight = 11.25.sp, fontWeight = FontWeight.Bold, color = Color(0xFF212121))
+        }
+    }
+}
+
+// নিচের বার: বাটন ২৫% ছোট। ট্যাব বদলালে সিলেক্টের শেড এক বাটন থেকে আরেক বাটনে
+// জুম আউট হয়ে (ছোট হয়ে) সরে গিয়ে নতুন বাটনে জুম ইন (বড়) হয়ে বসে
+@Composable
+private fun AnimatedBottomBar(tab: Int, onSelect: (Int) -> Unit) {
+    val prog = remember { androidx.compose.animation.core.Animatable(1f) }
+    var from by remember { mutableFloatStateOf(tab.toFloat()) }
+    var to by remember { mutableIntStateOf(tab) }
+    LaunchedEffect(tab) {
+        if (to == tab) return@LaunchedEffect
+        // চলতি অবস্থান থেকেই শুরু, তাই মাঝপথে আবার চাপলেও ঝটকা লাগবে না
+        from = from + (to - from) * prog.value
+        to = tab
+        prog.snapTo(0f)
+        prog.animateTo(
+            1f,
+            androidx.compose.animation.core.tween(
+                450,
+                easing = androidx.compose.animation.core.FastOutSlowInEasing
+            )
+        )
+    }
+    val pos = from + (to - from) * prog.value
+    val zoom = 1f - 0.4f * kotlin.math.sin(Math.PI * prog.value).toFloat()
+
+    Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
+        androidx.compose.foundation.layout.BoxWithConstraints(
+            Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .height(60.dp)
+        ) {
+            val itemW = maxWidth / TABS.size
+            val hlW = 33.dp
+            val hlH = 33.dp
+            // চলমান শেড
+            Box(
+                Modifier
+                    .offset(x = itemW * pos + (itemW - hlW) / 2, y = 5.dp)
+                    .size(width = hlW, height = hlH)
+                    .graphicsLayer { scaleX = zoom; scaleY = zoom }
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+            )
+            Row(Modifier.fillMaxSize()) {
+                TABS.forEachIndexed { i, t ->
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { onSelect(i) }
+                            .padding(top = 5.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.height(hlH)) {
+                            if (i == 0) TodayCalendarIcon() else Text(t.first, fontSize = 21.sp)
+                        }
+                        Text(
+                            t.second,
+                            fontSize = 8.25.sp,
+                            lineHeight = 10.sp,
+                            modifier = Modifier.padding(top = 3.dp),
+                            color = if (tab == i) MaterialTheme.colorScheme.onSurface
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -195,36 +275,7 @@ fun AppRoot() {
                 // ফোনের ব্যাক: অন্য ট্যাব থেকে আগে ড্যাশ (আজ) এ আসবে, ড্যাশে থাকলে অ্যাপ বন্ধ হবে
                 BackHandler(enabled = tab != 0) { tab = 0 }
                 Scaffold(
-                    bottomBar = {
-                        NavigationBar {
-                            TABS.forEachIndexed { i, t ->
-                                NavigationBarItem(
-                                    selected = tab == i,
-                                    onClick = { tab = i },
-                                    // আইকন বড়, কিন্তু সিলেক্টের শেড বক্স আইকনের মাপে ছোট
-                                    colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
-                                        indicatorColor = Color.Transparent
-                                    ),
-                                    icon = {
-                                        Box(
-                                            contentAlignment = Alignment.Center,
-                                            modifier = Modifier
-                                                .height(44.dp)
-                                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
-                                                .background(
-                                                    if (tab == i) MaterialTheme.colorScheme.primaryContainer
-                                                    else Color.Transparent
-                                                )
-                                                .padding(horizontal = 4.dp)
-                                        ) {
-                                            if (i == 0) TodayCalendarIcon() else Text(t.first, fontSize = 28.sp)
-                                        }
-                                    },
-                                    label = { Text(t.second, fontSize = 11.sp) }
-                                )
-                            }
-                        }
-                    }
+                    bottomBar = { AnimatedBottomBar(tab) { tab = it } }
                 ) { pad ->
                     Box(Modifier.padding(pad)) {
                         when (tab) {
