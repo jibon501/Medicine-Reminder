@@ -1451,15 +1451,28 @@ fun SettingsScreen() {
         ) {
             Text(if (d.tabSound) "🔊 সাউন্ড: চালু" else "🔇 সাউন্ড: বন্ধ")
         }
-        OutlinedButton(
-            onClick = {
-                val next = (d.tabVolume + 1) % 3
-                Store.update(ctx) { it.copy(tabVolume = next) }
-                TabSound.play(maxOf(d.tabAnim - 1, 0), next)
-            },
-            modifier = Modifier.fillMaxWidth()
+        // ভলিউম বার (০ থেকে ফুল)
+        var vol by remember { mutableStateOf(d.tabVolume) }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(
+                    1.dp,
+                    MaterialTheme.colorScheme.outline,
+                    androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
+                )
+                .padding(horizontal = 16.dp, vertical = 6.dp)
         ) {
-            Text("🔉 সাউন্ডের ভলিউম: " + listOf("কম", "মাঝারি", "বেশি").getOrElse(d.tabVolume) { "কম" })
+            Text("ভলিউম")
+            androidx.compose.material3.Slider(
+                value = vol,
+                onValueChange = { vol = it },
+                valueRange = 0f..1f,
+                onValueChangeFinished = {
+                    Store.update(ctx) { it.copy(tabVolume = vol) }
+                    TabSound.play(maxOf(d.tabAnim - 1, 0), vol)
+                }
+            )
         }
 
         // ব্যাকআপ ও রিস্টোর হেল্পের ঠিক উপরে

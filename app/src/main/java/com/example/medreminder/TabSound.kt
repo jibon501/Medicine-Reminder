@@ -14,8 +14,9 @@ object TabSound {
     private var last: AudioTrack? = null
 
     @Synchronized
-    // level: ০ = কম (ডিফল্ট), ১ = মাঝারি, ২ = বেশি
-    fun play(style: Int, level: Int = 0) {
+    // volume: ০.০ (নীরব) থেকে ১.০ (ফুল)। ডিফল্ট হালকা (০.২৫)
+    fun play(style: Int, volume: Float = 0.25f) {
+        if (volume <= 0f) return
         try {
             val pcm = cache.getOrPut(style) { synth(style) }
             last?.let { try { it.stop(); it.release() } catch (_: Exception) {} }
@@ -38,7 +39,7 @@ object TabSound {
                 .setTransferMode(AudioTrack.MODE_STATIC)
                 .build()
             t.write(pcm, 0, pcm.size)
-            t.setVolume(when (level) { 1 -> 0.6f; 2 -> 1f; else -> 0.25f })
+            t.setVolume(volume.coerceIn(0f, 1f))
             t.play()
             last = t
         } catch (_: Exception) {

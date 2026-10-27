@@ -150,7 +150,7 @@ private fun tabTransition(style: Int, forward: Boolean): androidx.compose.animat
 // নিচের বার: বাটন ২৫% ছোট। ট্যাব বদলালে সিলেক্টের শেড এক বাটন থেকে আরেক বাটনে যায়,
 // কীভাবে যাবে তা style ঠিক করে (TAB_ANIMS)
 @Composable
-private fun AnimatedBottomBar(tab: Int, style: Int, sound: Boolean, volume: Int, onSelect: (Int) -> Unit) {
+private fun AnimatedBottomBar(tab: Int, style: Int, sound: Boolean, volume: Float, onSelect: (Int) -> Unit) {
     val prog = remember { androidx.compose.animation.core.Animatable(1f) }
     var from by remember { mutableFloatStateOf(tab.toFloat()) }
     var to by remember { mutableIntStateOf(tab) }
