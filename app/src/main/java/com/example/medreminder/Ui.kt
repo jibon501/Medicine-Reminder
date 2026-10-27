@@ -1349,6 +1349,42 @@ fun SettingsScreen() {
             }
         }
 
+        // ট্যাব বদলের অ্যানিমেশন বেছে নেওয়ার বাটন (নিচের সিলেক্ট বক্স ও মূল স্ক্রিন, দুটোতেই কাজ করে)
+        var showAnim by remember { mutableStateOf(false) }
+        OutlinedButton(onClick = { showAnim = true }, modifier = Modifier.fillMaxWidth()) {
+            Text("🎞 ট্যাব অ্যানিমেশন: " + TAB_ANIMS.getOrElse(d.tabAnim) { TAB_ANIMS[0] })
+        }
+        if (showAnim) {
+            AlertDialog(
+                onDismissRequest = { showAnim = false },
+                title = { Text("ট্যাব অ্যানিমেশন") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        TAB_ANIMS.forEachIndexed { i, label ->
+                            if (d.tabAnim == i) {
+                                Button(onClick = { Store.update(ctx) { it.copy(tabAnim = i) }; showAnim = false; if (d.tabSound) TabSound.play(i) }, modifier = Modifier.fillMaxWidth()) { Text(label) }
+                            } else {
+                                OutlinedButton(onClick = { Store.update(ctx) { it.copy(tabAnim = i) }; showAnim = false; if (d.tabSound) TabSound.play(i) }, modifier = Modifier.fillMaxWidth()) { Text(label) }
+                            }
+                        }
+                    }
+                },
+                confirmButton = { TextButton(onClick = { showAnim = false }) { Text("বন্ধ") } }
+            )
+        }
+
+        // অ্যানিমেশনের সাউন্ড চালু/বন্ধ
+        OutlinedButton(
+            onClick = {
+                val on = !d.tabSound
+                Store.update(ctx) { it.copy(tabSound = on) }
+                if (on) TabSound.play(d.tabAnim)
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(if (d.tabSound) "🔊 অ্যানিমেশনের সাউন্ড: চালু" else "🔇 অ্যানিমেশনের সাউন্ড: বন্ধ")
+        }
+
         var showMeals by remember { mutableStateOf(false) }
         OutlinedButton(onClick = { showMeals = true }, modifier = Modifier.fillMaxWidth()) {
             Text("🍽 খাবারের সময়")

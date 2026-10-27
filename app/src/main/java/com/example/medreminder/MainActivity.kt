@@ -41,6 +41,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Row
@@ -102,10 +104,49 @@ fun TodayCalendarIcon() {
     }
 }
 
-// নিচের বার: বাটন ২৫% ছোট। ট্যাব বদলালে সিলেক্টের শেড এক বাটন থেকে আরেক বাটনে
-// জুম আউট হয়ে (ছোট হয়ে) সরে গিয়ে নতুন বাটনে জুম ইন (বড়) হয়ে বসে
+// ট্যাব অ্যানিমেশনের ধরন (সেটিংস থেকে বদলানো যায়)। ০ = ডিফল্ট (জুম আউট → জুম ইন)
+// প্রতিটা ধরন নিচের সিলেক্ট বক্সের চলা এবং মূল স্ক্রিনের ট্রানজিশন, দুটোই ঠিক করে
+val TAB_ANIMS = listOf(
+    "🔍 জুম আউট → ইন (ডিফল্ট)",
+    "🌀 ঘুরতে ঘুরতে",
+    "➡️ সোজা লাইনে",
+    "🏀 লাফিয়ে (বাউন্স)",
+    "🃏 ফ্লিপ (উল্টে)",
+    "🍬 রাবারের মতো টান"
+)
+
+// মূল স্ক্রিনের ট্যাব বদলের ট্রানজিশন (নিচের সিলেক্ট বক্সের স্টাইলের সাথে মিল রেখে)
+private fun tabTransition(style: Int, forward: Boolean): androidx.compose.animation.ContentTransform {
+    val d = if (forward) 1 else -1
+    return when (style) {
+        1 -> androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(450)) togetherWith
+            androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(250))
+        2 -> (androidx.compose.animation.slideInHorizontally(androidx.compose.animation.core.tween(380)) { it * d } +
+            androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(380))) togetherWith
+            (androidx.compose.animation.slideOutHorizontally(androidx.compose.animation.core.tween(380)) { -it * d } +
+                androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(380)))
+        3 -> (androidx.compose.animation.slideInVertically(
+            androidx.compose.animation.core.spring(
+                dampingRatio = 0.55f,
+                stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
+            )
+        ) { it / 4 } + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(250))) togetherWith
+            androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(150))
+        4 -> androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(350, delayMillis = 150)) togetherWith
+            androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(200))
+        5 -> androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(500)) togetherWith
+            androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(500))
+        else -> (androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(300)) +
+            androidx.compose.animation.scaleIn(androidx.compose.animation.core.tween(300), initialScale = 0.85f)) togetherWith
+            (androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(200)) +
+                androidx.compose.animation.scaleOut(androidx.compose.animation.core.tween(200), targetScale = 0.85f))
+    }
+}
+
+// নিচের বার: বাটন ২৫% ছোট। ট্যাব বদলালে সিলেক্টের শেড এক বাটন থেকে আরেক বাটনে যায়,
+// কীভাবে যাবে তা style ঠিক করে (TAB_ANIMS)
 @Composable
-private fun AnimatedBottomBar(tab: Int, onSelect: (Int) -> Unit) {
+private fun AnimatedBottomBar(tab: Int, style: Int, onSelect: (Int) -> Unit) {
     val prog = remember { androidx.compose.animation.core.Animatable(1f) }
     var from by remember { mutableFloatStateOf(tab.toFloat()) }
     var to by remember { mutableIntStateOf(tab) }
@@ -115,16 +156,35 @@ private fun AnimatedBottomBar(tab: Int, onSelect: (Int) -> Unit) {
         from = from + (to - from) * prog.value
         to = tab
         prog.snapTo(0f)
-        prog.animateTo(
-            1f,
-            androidx.compose.animation.core.tween(
-                450,
-                easing = androidx.compose.animation.core.FastOutSlowInEasing
+        when (style) {
+            1 -> prog.animateTo(1f, androidx.compose.animation.core.tween(650, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+            2 -> prog.animateTo(1f, androidx.compose.animation.core.tween(380, easing = androidx.compose.animation.core.LinearEasing))
+            3 -> prog.animateTo(
+                1f,
+                androidx.compose.animation.core.spring(
+                    dampingRatio = 0.45f,
+                    stiffness = androidx.compose.animation.core.Spring.StiffnessLow
+                )
             )
-        )
+            4 -> prog.animateTo(1f, androidx.compose.animation.core.tween(650, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+            5 -> prog.animateTo(1f, androidx.compose.animation.core.tween(500, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+            else -> prog.animateTo(1f, androidx.compose.animation.core.tween(450, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+        }
     }
-    val pos = from + (to - from) * prog.value
-    val zoom = 1f - 0.4f * kotlin.math.sin(Math.PI * prog.value).toFloat()
+    val p = prog.value
+    val pos = from + (to - from) * p
+    val dir = if (to >= from) 1f else -1f
+    val wave = kotlin.math.sin(Math.PI * p.coerceIn(0f, 1f)).toFloat()
+    // স্টাইল অনুযায়ী শেডের স্কেল/ঘোরা
+    var sx = 1f; var sy = 1f; var rz = 0f; var ry = 0f
+    when (style) {
+        1 -> { sx = 1f - 0.25f * wave; sy = sx; rz = 360f * p * dir }
+        2 -> { }
+        3 -> { }
+        4 -> { ry = 360f * p * dir }
+        5 -> { sx = 1f + 1.6f * wave; sy = 1f - 0.25f * wave }
+        else -> { sx = 1f - 0.4f * wave; sy = sx }
+    }
 
     Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
         androidx.compose.foundation.layout.BoxWithConstraints(
@@ -141,7 +201,10 @@ private fun AnimatedBottomBar(tab: Int, onSelect: (Int) -> Unit) {
                 Modifier
                     .offset(x = itemW * pos + (itemW - hlW) / 2, y = 5.dp)
                     .size(width = hlW, height = hlH)
-                    .graphicsLayer { scaleX = zoom; scaleY = zoom }
+                    .graphicsLayer {
+                        scaleX = sx; scaleY = sy; rotationZ = rz; rotationY = ry
+                        cameraDistance = 12f * density
+                    }
                     .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.primaryContainer)
             )
@@ -275,21 +338,52 @@ fun AppRoot() {
                 // ফোনের ব্যাক: অন্য ট্যাব থেকে আগে ড্যাশ (আজ) এ আসবে, ড্যাশে থাকলে অ্যাপ বন্ধ হবে
                 BackHandler(enabled = tab != 0) { tab = 0 }
                 Scaffold(
-                    bottomBar = { AnimatedBottomBar(tab) { tab = it } }
+                    bottomBar = { AnimatedBottomBar(tab, Store.data.tabAnim) { tab = it } }
                 ) { pad ->
-                    Box(Modifier.padding(pad)) {
-                        when (tab) {
-                            0 -> TodayScreen()
-                            1 -> MedsScreen(
-                                onNew = { did -> editMed = newMedicine(did) },
-                                onEdit = { editMed = it }
-                            )
-                            2 -> DiseasesScreen(
-                                onNew = { editDisease = newDisease() },
-                                onEdit = { editDisease = it },
-                                onAddMed = { editMed = newMedicine(it.id); tab = 1 }
-                            )
-                            else -> SettingsScreen()
+                    val anim = Store.data.tabAnim
+                    androidx.compose.animation.AnimatedContent(
+                        targetState = tab,
+                        modifier = Modifier.padding(pad),
+                        transitionSpec = { tabTransition(anim, targetState > initialState) },
+                        label = "tabs"
+                    ) { t ->
+                        // ঘুরে/উল্টে ঢোকা ও বেরোনো স্টাইলের জন্য (মূল স্ক্রিনেও একই ধরন)
+                        val st = transition.animateFloat(
+                            transitionSpec = { androidx.compose.animation.core.tween(500) },
+                            label = "tabAnimState"
+                        ) { s ->
+                            when (s) {
+                                androidx.compose.animation.EnterExitState.PreEnter -> -1f
+                                androidx.compose.animation.EnterExitState.Visible -> 0f
+                                androidx.compose.animation.EnterExitState.PostExit -> 1f
+                            }
+                        }
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .graphicsLayer {
+                                    val v = st.value
+                                    when (anim) {
+                                        1 -> { rotationZ = 14f * v; val k = 1f - 0.12f * kotlin.math.abs(v); scaleX = k; scaleY = k }
+                                        4 -> { rotationY = 90f * v; cameraDistance = 12f * density }
+                                        else -> {}
+                                    }
+                                }
+                                .background(MaterialTheme.colorScheme.background)
+                        ) {
+                            when (t) {
+                                0 -> TodayScreen()
+                                1 -> MedsScreen(
+                                    onNew = { did -> editMed = newMedicine(did) },
+                                    onEdit = { editMed = it }
+                                )
+                                2 -> DiseasesScreen(
+                                    onNew = { editDisease = newDisease() },
+                                    onEdit = { editDisease = it },
+                                    onAddMed = { editMed = newMedicine(it.id); tab = 1 }
+                                )
+                                else -> SettingsScreen()
+                            }
                         }
                     }
                 }

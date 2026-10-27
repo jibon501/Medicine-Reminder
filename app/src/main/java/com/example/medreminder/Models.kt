@@ -189,7 +189,9 @@ data class AppData(
     val taken: List<String> = emptyList(),
     val lastBackup: String = "",
     val theme: String = "system",
-    val currentDiseaseId: String = ""
+    val currentDiseaseId: String = "",
+    val tabAnim: Int = 0,
+    val tabSound: Boolean = true
 ) {
     fun toJson(): JSONObject {
         val o = JSONObject()
@@ -211,6 +213,8 @@ data class AppData(
         o.put("lastBackup", lastBackup)
         o.put("theme", theme)
         o.put("currentDiseaseId", currentDiseaseId)
+        o.put("tabAnim", tabAnim)
+        o.put("tabSound", tabSound)
         return o
     }
 
@@ -230,7 +234,9 @@ data class AppData(
                 taken = List(ta.length()) { i -> ta.getString(i) },
                 lastBackup = o.optString("lastBackup", ""),
                 theme = o.optString("theme", "system"),
-                currentDiseaseId = o.optString("currentDiseaseId", "")
+                currentDiseaseId = o.optString("currentDiseaseId", ""),
+                tabAnim = o.optInt("tabAnim", 0),
+                tabSound = o.optBoolean("tabSound", true)
             )
         }
     }
