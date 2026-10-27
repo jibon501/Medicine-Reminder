@@ -840,12 +840,21 @@ fun PurchaseListDialog(disease: Disease, onDismiss: () -> Unit) {
         )
     }
 
+    // দিন সংখ্যা বসালে তালিকা বড় হলে নিজে নিচে স্ক্রল হয়ে "গ্যালারিতে সেভ করুন" বাটন দেখায়
+    val listScroll = rememberScrollState()
+    LaunchedEffect(days) {
+        if (days > 0) {
+            delay(350)
+            listScroll.animateScrollTo(listScroll.maxValue)
+        }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("🛒 কেনার তালিকা") },
         text = {
             Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
+                modifier = Modifier.verticalScroll(listScroll),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 NumField("কত দিনের ঔষধ কিনতে চান?", daysText) { daysText = it.take(3) }
