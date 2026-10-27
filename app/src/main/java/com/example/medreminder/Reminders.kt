@@ -326,9 +326,10 @@ object Reminders {
     fun unmarkTaken(ctx: Context, key: String, dateStr: String) {
         Store.ensureLoaded(ctx)
         removeTaken(ctx, key, dateStr)
-        if (Slots.isBefore(key)) {
-            // পরের স্লট বাতিল ও তার নোটিফিকেশন বন্ধ
-            removeTaken(ctx, Slots.mealOf(key) + "_AFTER", dateStr)
+        // এর পরের সব স্লট (দুপুর, রাত ইত্যাদি) অটো "খাইনি" হয়ে যাবে, ক্রম ঠিক রাখতে
+        val idx = slotOrder.indexOf(key)
+        for (i in idx + 1 until slotOrder.size) {
+            if (Store.data.taken.contains(dateStr + "|" + slotOrder[i])) removeTaken(ctx, slotOrder[i], dateStr)
         }
         // খাওয়া হয়নি ধরা হলো, তাই নোটিফিকেশন আবার চালু
         val d = Store.data

@@ -19,8 +19,14 @@ android {
     }
 
     buildTypes {
+        // কোড অস্পষ্ট (obfuscate) করার জন্য। GitHub Actions debug বিল্ড করে, তাই debug-এও চালু
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+        }
+        debug {
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
         }
     }
 

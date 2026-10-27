@@ -163,8 +163,8 @@ fun TodayScreen() {
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("আজকের ঔষধ", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-            Text(prettyDate(todayStr), style = MaterialTheme.typography.bodyMedium)
+            Text("আজকের ঔষধ", fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(prettyDate(todayStr), fontSize = 13.sp)
         }
         if (meals.isEmpty()) {
             Text("আজকের জন্য কোনো ঔষধ নেই। \"ঔষধ\" ট্যাবে গিয়ে ঔষধ যোগ করুন।")
@@ -181,7 +181,9 @@ fun TodayScreen() {
                     Text(
                         (MEAL_EMOJI[meal] ?: "") + " " + Slots.mealLabel(meal) + " · " + pretty(Slots.mealTime(d, meal)),
                         fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp
+                        fontSize = 15.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
                     )
                     Row(Modifier.fillMaxSize().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         SlotPane(kb, "খাবারের আগে", visible(kb), d, today, now, fs, Modifier.weight(1f).fillMaxSize())
@@ -221,8 +223,8 @@ private fun SlotPane(
             Reminders.numberedLines(meds).forEach { Text(it, fontSize = fs, lineHeight = fs * 1.2f) }
         }
         if (blocked && !done) Text("আগের ঔষধ আগে নিন", fontSize = 10.sp, color = Color.Gray)
-        // একটাই বাটন, একটাই লেখা: সবসময় শুরুতে লাল "❌ খাইনি"; খেয়ে চাপলে সবুজ "✔ খেয়েছি"; আবার চাপলে আগের অবস্থা
-        val btnColor = if (done) Color(0xFF2E7D32) else Color(0xFFC62828)
+        // একটাই বাটন, একটাই লেখা: সবসময় শুরুতে ধূসর "❌ খাইনি"; খেয়ে চাপলে সবুজ "✔ খেয়েছি"; আবার চাপলে আগের অবস্থা
+        val btnColor = if (done) Color(0xFF2E7D32) else Color(0xFF757575)
         Button(
             onClick = {
                 if (done) Reminders.unmarkTaken(ctx, key, todayStr)
@@ -230,11 +232,11 @@ private fun SlotPane(
             },
             colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = btnColor, contentColor = Color.White),
             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-            modifier = Modifier.fillMaxWidth().height(48.dp)
+            modifier = Modifier.fillMaxWidth().height(34.dp)
         ) {
             Text(
                 if (done) Reminders.yesLabel(meds) else Reminders.noLabel(meds),
-                fontSize = 15.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Bold
             )
         }
@@ -330,13 +332,14 @@ fun MedsScreen(onNew: (String) -> Unit, onEdit: (Medicine) -> Unit) {
     val title = if (sel == "") "অন্যান্য ঔষধ"
         else diseaseMedTitle(d.diseases.firstOrNull { it.id == sel }?.name ?: "")
     Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextButton(onClick = { selRaw = null; open = emptySet() }) { Text("← পিছনে") }
-            Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-        }
+        // রোগের নাম মাঝখানে; ফিরতে ফোনের ব্যাক বা নিচের ট্যাব
+        Text(
+            title,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.titleLarge,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)
+        )
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
@@ -721,6 +724,33 @@ fun PurchaseListDialog(disease: Disease, onDismiss: () -> Unit) {
     }
     val bmp = remember(disease.id, Store.data.medicines, days, overrides) { PurchaseList.build(disease, items, days) }
 
+    // গ্যালারিতে সেভের আগে ছবির প্রিভিউ
+    var showPreview by remember { mutableStateOf(false) }
+    if (showPreview) {
+        AlertDialog(
+            onDismissRequest = { showPreview = false },
+            title = { Text("প্রিভিউ") },
+            text = {
+                Box(Modifier.verticalScroll(rememberScrollState())) {
+                    Image(
+                        bitmap = bmp.asImageBitmap(),
+                        contentDescription = null,
+                        contentScale = ContentScale.FillWidth,
+                        modifier = Modifier.fillMaxWidth().border(1.dp, Color.Gray)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (PurchaseList.saveToGallery(ctx, bmp, disease)) toast(ctx, "গ্যালারিতে সেভ হয়েছে")
+                    else toast(ctx, "সেভ করা যায়নি")
+                    showPreview = false
+                }) { Text("🖼 সেভ করুন") }
+            },
+            dismissButton = { TextButton(onClick = { showPreview = false }) { Text("বাতিল") } }
+        )
+    }
+
     editing?.let { m ->
         PurchaseItemDialog(
             med = m,
@@ -777,10 +807,7 @@ fun PurchaseListDialog(disease: Disease, onDismiss: () -> Unit) {
                 if (PurchaseList.canSaveToGallery()) {
                     OutlinedButton(
                         enabled = days > 0,
-                        onClick = {
-                            if (PurchaseList.saveToGallery(ctx, bmp, disease)) toast(ctx, "গ্যালারিতে সেভ হয়েছে")
-                            else toast(ctx, "সেভ করা যায়নি")
-                        },
+                        onClick = { showPreview = true },
                         modifier = Modifier.fillMaxWidth()
                     ) { Text("🖼 গ্যালারিতে সেভ করুন") }
                 }
@@ -920,8 +947,13 @@ fun DiseasesScreen(onNew: () -> Unit, onEdit: (Disease) -> Unit, onAddMed: (Dise
                         )
                         Text("তারিখ: " + prettyDate(ds.date))
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = { onAddMed(ds) }, modifier = Modifier.weight(1f)) { Text("ঔষধ +") }
-                            OutlinedButton(onClick = { listFor = ds }, modifier = Modifier.weight(1f)) { Text("🛒 কেনার তালিকা") }
+                            OutlinedButton(onClick = { onAddMed(ds) }, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp), modifier = Modifier.weight(1f)) { Text("ঔষধ +", maxLines = 1, fontSize = 13.sp) }
+                            OutlinedButton(
+                                enabled = d.medicines.any { it.diseaseId == ds.id },
+                                onClick = { listFor = ds },
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) { Text("🛒 কেনার তালিকা", maxLines = 1, softWrap = false, fontSize = 13.sp) }
                         }
                     }
                 }
@@ -1289,7 +1321,6 @@ fun SettingsScreen() {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("থিম", style = MaterialTheme.typography.titleMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("light" to "☀️ লাইট", "dark" to "🌙 ব্ল্যাক", "system" to "📱 অটো").forEach { (k, label) ->
                 if (d.theme == k) {
@@ -1350,17 +1381,7 @@ fun SettingsScreen() {
             )
         }
 
-        Button(
-            onClick = { withStorage { exporter.launch("medicine-backup-" + LocalDate.now().toString() + ".zip") } },
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("☁️ ব্যাকআপ") }
-        OutlinedButton(
-            onClick = { withStorage { importer.launch(arrayOf("*/*")) } },
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("📥 রিস্টোর") }
-
-        Text("নোটিফিকেশন ঠিকমতো আসার জন্য", style = MaterialTheme.typography.titleMedium)
-        Button(onClick = { Reminders.testNotification(ctx) }, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = { Reminders.testNotification(ctx) }, modifier = Modifier.fillMaxWidth()) {
             Text("🔔 টেস্ট নোটিফিকেশন পাঠান")
         }
         OutlinedButton(
@@ -1373,6 +1394,16 @@ fun SettingsScreen() {
             },
             modifier = Modifier.fillMaxWidth()
         ) { Text("🔋 ব্যাটারি সেভার থেকে অ্যাপটি বাদ দিন") }
+
+        // ব্যাকআপ ও রিস্টোর হেল্পের ঠিক উপরে
+        OutlinedButton(
+            onClick = { withStorage { exporter.launch("medicine-backup-" + LocalDate.now().toString() + ".zip") } },
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("☁️ ব্যাকআপ") }
+        OutlinedButton(
+            onClick = { withStorage { importer.launch(arrayOf("*/*")) } },
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("📥 রিস্টোর") }
 
         // হেল্প বাটন সবার শেষে (ABOUT এর ঠিক উপরে)
         var showHelp by remember { mutableStateOf(false) }
@@ -1392,7 +1423,7 @@ fun SettingsScreen() {
                         Text("১. অ্যাপ খুললে প্রথমে ৫ সেকেন্ড একটি আয়াত দেখা যায়, তারপর মূল পর্দা আসে। নিচে চারটি ট্যাব আছে:", fontWeight = FontWeight.Bold)
                         Text("• 📅 আজ — আজকের ঔষধের তালিকা ও \"খেয়েছি\" বাটন\n• 💊 ঔষধ — সব ঔষধ, রোগের নাম অনুযায়ী বাটনে সাজানো\n• 🩺 রোগ — রোগ, প্রেসক্রিপশনের ছবি ও কেনার তালিকা\n• ⚙️ সেটিংস — থিম, খাবারের সময়, ব্যাকআপ, হেল্প")
                         Text("২. সেটআপ", fontWeight = FontWeight.Bold)
-                        Text("1. অ্যাপ প্রথমবার খুললে নোটিফিকেশনের অনুমতি চাইবে। অনুমতি দিন, নইলে রিমাইন্ডার আসবে না।\n2. সেটিংস → 🍽 খাবারের সময়-এ সকাল, দুপুর ও রাতের খাবারের সময় ঠিক করুন। ঔষধের রিমাইন্ডার এই সময় ধরেই আসে।\n3. সেটিংসের \"নোটিফিকেশন ঠিকমতো আসার জন্য\" অংশে গিয়ে:\n    ◦ 🔔 টেস্ট নোটিফিকেশন পাঠান চাপুন এবং নোটিফিকেশন আসছে কিনা দেখুন।\n    ◦ 🔋 ব্যাটারি সেভার থেকে অ্যাপটি বাদ দিন চাপুন। এটা না করলে কিছু ফোন অ্যাপ বন্ধ করে দেয় এবং রিমাইন্ডার আসে না।\n4. পছন্দমতো থিম বেছে নিন: ☀️ লাইট, 🌙 ব্ল্যাক, বা 📱 অটো (ফোনের সেটিং অনুযায়ী)।")
+                        Text("1. অ্যাপ প্রথমবার খুললে নোটিফিকেশনের অনুমতি চাইবে। অনুমতি দিন, নইলে রিমাইন্ডার আসবে না।\n2. সেটিংস → 🍽 খাবারের সময়-এ সকাল, দুপুর ও রাতের খাবারের সময় ঠিক করুন। ঔষধের রিমাইন্ডার এই সময় ধরেই আসে।\n3. পছন্দমতো থিম বেছে নিন: ☀️ লাইট, 🌙 ব্ল্যাক, বা 📱 অটো (ফোনের সেটিং অনুযায়ী)।")
                         Text("৩. রোগ যোগ করা", fontWeight = FontWeight.Bold)
                         Text("প্রথমে রোগ যোগ করা ভালো, তাহলে ঔষধ সেই রোগের নিচে গুছানো থাকবে।")
                         Text("৪. ঔষধ যোগ করা", fontWeight = FontWeight.Bold)
@@ -1463,7 +1494,7 @@ fun AboutDialog(onClose: () -> Unit) {
     ) {
         androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
             // লেখা ও বাটনের জন্য নিচে জায়গা রেখে বাকিটা পোস্টারের, তাই স্ক্রল লাগে না
-            val posterH = minOf(maxWidth * 1.5f, maxHeight - 250.dp)
+            val posterH = minOf(maxWidth * 1.5f, maxHeight - 270.dp)
             Column(
                 modifier = Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -1482,6 +1513,23 @@ fun AboutDialog(onClose: () -> Unit) {
                 ) {
                     words.forEachIndexed { i, (w, col) -> FadeWord(w, shown > i, col) }
                 }
+                // শহীদদের নিয়ে আয়াত: এক লাইনে, জায়গা না হলে ফন্ট ছোট হয়ে যায়
+                val ayah = buildAnnotatedString {
+                    append("আর যারা আল্লাহর রাস্তায় নিহত হয়, তাদের মৃত বলো না। বরং তারা জীবিত, কিন্তু তোমরা তা বুঝ না। ")
+                    withStyle(SpanStyle(color = Color(0xFF80DEEA))) { append("[সূরা বাকারাহ্: ১৫৪]") }
+                }
+                var ayahSize by remember { mutableStateOf(12f) }
+                Text(
+                    ayah,
+                    color = Color.White,
+                    fontSize = ayahSize.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    onTextLayout = { if (it.didOverflowWidth && ayahSize > 7f) ayahSize -= 0.5f },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                )
                 Box(Modifier.weight(1f))
                 // নামের গ্লাস বাটন একদম নিচে
                 val glassShape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp)
