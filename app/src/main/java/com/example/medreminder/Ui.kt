@@ -1531,17 +1531,19 @@ fun AboutDialog(onClose: () -> Unit) {
                 ) {
                     words.forEachIndexed { i, (w, col) -> FadeWord(w, shown > i, col) }
                 }
-                // শহীদদের নিয়ে আয়াত: এক লাইনে, জায়গা না হলে ফন্ট ছোট হয়ে যায়
+                // শহীদদের নিয়ে আয়াত: ২ লাইনে, উপরের অ্যানিমেশন লাইনের (১৫sp) চেয়ে ছোট; জায়গা না হলে ফন্ট আরও ছোট হয়
                 val ayah = buildAnnotatedString {
-                    append("আর যারা আল্লাহর রাস্তায় নিহত হয়, তাদের মৃত বলো না। বরং তারা জীবিত, কিন্তু তোমরা তা বুঝ না। ")
+                    append("আর যারা আল্লাহর রাস্তায় নিহত হয়, তাদের মৃত বলো না।\nবরং তারা জীবিত, কিন্তু তোমরা তা বুঝ না। ")
                     withStyle(SpanStyle(color = Color(0xFF80DEEA))) { append("[সূরা বাকারাহ্: ১৫৪]") }
                 }
-                var ayahSize by remember { mutableStateOf(12f) }
+                var ayahSize by remember { mutableStateOf(13f) }
                 Text(
                     ayah,
                     color = Color.White,
                     fontSize = ayahSize.sp,
-                    maxLines = 1,
+                    lineHeight = (ayahSize * 1.4f).sp,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
                     softWrap = false,
                     onTextLayout = { if (it.didOverflowWidth && ayahSize > 7f) ayahSize -= 0.5f },
                     modifier = Modifier
