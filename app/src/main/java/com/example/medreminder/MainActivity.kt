@@ -36,6 +36,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -171,7 +173,21 @@ fun AppRoot() {
                                 NavigationBarItem(
                                     selected = tab == i,
                                     onClick = { tab = i },
-                                    icon = { Text(t.first) },
+                                    // আইকন বড়, কিন্তু সিলেক্টের শেড বক্স আইকনের মাপে ছোট
+                                    colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
+                                        indicatorColor = Color.Transparent
+                                    ),
+                                    icon = {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                                                .background(
+                                                    if (tab == i) MaterialTheme.colorScheme.primaryContainer
+                                                    else Color.Transparent
+                                                )
+                                                .padding(horizontal = 4.dp)
+                                        ) { Text(t.first, fontSize = 28.sp) }
+                                    },
                                     label = { Text(t.second, fontSize = 11.sp) }
                                 )
                             }

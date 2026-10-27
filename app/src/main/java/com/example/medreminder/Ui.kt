@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -178,16 +179,30 @@ fun TodayScreen() {
             val fs = if (most > 4) 11.sp else if (most > 2) 12.sp else 14.sp
             Card(modifier = Modifier.fillMaxWidth().weight((most + 3).toFloat())) {
                 Column(Modifier.fillMaxSize().padding(8.dp)) {
-                    Text(
-                        (MEAL_EMOJI[meal] ?: "") + " " + Slots.mealLabel(meal) + " · " + pretty(Slots.mealTime(d, meal)),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Row(Modifier.fillMaxSize().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SlotPane(kb, "খাবারের আগে", visible(kb), d, today, now, fs, Modifier.weight(1f).fillMaxSize())
-                        SlotPane(ka, "খাবারের পরে", visible(ka), d, today, now, fs, Modifier.weight(1f).fillMaxSize())
+                    // সকাল/দুপুর/রাত প্রথম ঘরের মাঝখানে, ঘড়ির সময় দ্বিতীয় ঘরের মাঝখানে; মাঝে একটা গ্যাপ
+                    Row(Modifier.fillMaxWidth()) {
+                        Text(
+                            (MEAL_EMOJI[meal] ?: "") + " " + Slots.mealLabel(meal),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.weight(1f)
+                        )
+                        androidx.compose.foundation.layout.Spacer(Modifier.width(17.dp))
+                        Text(
+                            pretty(Slots.mealTime(d, meal)),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Row(Modifier.fillMaxSize().padding(top = 4.dp)) {
+                        SlotPane(kb, "খাবারের আগে", visible(kb), d, today, now, fs, false, Modifier.weight(1f).fillMaxSize())
+                        Box(Modifier.width(17.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                            Box(Modifier.width(1.dp).fillMaxHeight().background(Color.Gray.copy(alpha = 0.4f)))
+                        }
+                        SlotPane(ka, "খাবারের পরে", visible(ka), d, today, now, fs, true, Modifier.weight(1f).fillMaxSize())
                     }
                 }
             }
@@ -204,12 +219,21 @@ private fun SlotPane(
     today: LocalDate,
     now: LocalDateTime,
     fs: androidx.compose.ui.unit.TextUnit,
+    titleEnd: Boolean,
     modifier: Modifier
 ) {
     val ctx = LocalContext.current
     val todayStr = today.toString()
     Column(modifier) {
-        Text(title, fontWeight = FontWeight.Bold, fontSize = fs, color = MaterialTheme.colorScheme.primary)
+        // "খাবারের পরে" ডানপ্রান্তে
+        Text(
+            title,
+            fontWeight = FontWeight.Bold,
+            fontSize = fs,
+            color = MaterialTheme.colorScheme.primary,
+            textAlign = if (titleEnd) TextAlign.End else TextAlign.Start,
+            modifier = Modifier.fillMaxWidth()
+        )
         if (!show) {
             Text("— নেই —", fontSize = fs, color = Color.Gray)
             return@Column
@@ -220,7 +244,11 @@ private fun SlotPane(
 
         // ঔষধ বেশি হলে শুধু এই অংশটা স্ক্রল হবে, বাটন নিচে স্থির থাকবে
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-            Reminders.numberedLines(meds).forEach { Text(it, fontSize = fs, lineHeight = fs * 1.2f) }
+            // ১টি হলে পরিমাণ দেখানো হয় না, ১ এর বেশি হলে দেখায়
+            meds.forEachIndexed { i, m ->
+                val line = bn(i + 1) + ". " + m.name + (if (m.dose > 1) " — " + m.doseLabel() else "")
+                Text(line, fontSize = fs, lineHeight = fs * 1.2f)
+            }
         }
         if (blocked && !done) Text("আগের ঔষধ আগে নিন", fontSize = 10.sp, color = Color.Gray)
         // একটাই বাটন, একটাই লেখা: সবসময় শুরুতে ধূসর "❌ খাইনি"; খেয়ে চাপলে সবুজ "✔ খেয়েছি"; আবার চাপলে আগের অবস্থা
