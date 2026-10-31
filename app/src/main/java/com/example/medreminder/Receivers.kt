@@ -19,13 +19,14 @@ class AlarmReceiver : BroadcastReceiver() {
     }
 }
 
-// নোটিফিকেশন বা widget-এর "১৫ মিনিট পরে" বাটন
+// নোটিফিকেশন বা widget-এর "১৫ মিনিট পরে" / "৩০ মিনিট পরে" বাটন
 class SnoozeReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         Store.ensureLoaded(context)
         val key = intent.getStringExtra("key") ?: return
         val date = intent.getStringExtra("date") ?: return
-        Reminders.snooze(context, key, date)
+        val min = intent.getIntExtra("min", Reminders.SNOOZE_MINUTES)
+        Reminders.snooze(context, key, date, min)
     }
 }
 

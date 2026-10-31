@@ -31,8 +31,9 @@ object Reminders {
     // খাবারের পরের ঔষধের নোটিফিকেশন খাবারের সময়ের এত মিনিট পরে আসে
     const val AFTER_LAG = 30
 
-    // "১৫ মিনিট পরে" বাটন চাপলে এত মিনিট পরে নোটিফিকেশন আবার আসে
+    // পিছানোর দুটো বাটন: ডিফল্ট ১৫ মিনিট, আরেকটা ৩০ মিনিট। চাপলে এত মিনিট পরে নোটিফিকেশন আবার আসে
     const val SNOOZE_MINUTES = 15
+    const val SNOOZE_MINUTES_LONG = 30
     private const val FLAGS = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
 
     // ---------- helpers ----------
@@ -108,7 +109,7 @@ object Reminders {
     fun takenButtonLabel(meds: List<Medicine>): String =
         if (eatOnly(meds)) "✅ খেয়েছি" else "✅ নিয়েছি"
 
-    fun snoozeLabel(): String = "⏰ " + bn(SNOOZE_MINUTES) + " মিনিট পরে"
+    fun snoozeLabel(min: Int = SNOOZE_MINUTES): String = "⏰ " + bn(min) + " মিনিট পরে"
 
     // একটাই বাটন: খাওয়া হলে ওপরে "খাওয়া হয়েছে", নিচে "খাইনি" (বাটনে চাপলে আবার না-খাওয়া হয়ে যায়)
     fun doneTitle(meds: List<Medicine>): String =
@@ -163,11 +164,12 @@ object Reminders {
         return PendingIntent.getBroadcast(ctx, ("S" + key).hashCode(), i, FLAGS)
     }
 
-    fun snoozePendingIntent(ctx: Context, key: String, dateStr: String, code: String): PendingIntent {
+    fun snoozePendingIntent(ctx: Context, key: String, dateStr: String, code: String, min: Int): PendingIntent {
         val i = Intent(ctx, SnoozeReceiver::class.java)
         i.putExtra("key", key)
         i.putExtra("date", dateStr)
-        return PendingIntent.getBroadcast(ctx, (code + key).hashCode(), i, FLAGS)
+        i.putExtra("min", min)
+        return PendingIntent.getBroadcast(ctx, (code + min + key).hashCode(), i, FLAGS)
     }
 
     private fun cancelSnooze(ctx: Context, key: String) {
@@ -176,11 +178,11 @@ object Reminders {
         am.cancel(snoozePi(ctx, key, ""))
     }
 
-    // "১৫ মিনিট পরে": নোটিফিকেশন ও widget লুকিয়ে যায়, ১৫ মিনিট পরে নোটিফিকেশন আবার আসে
-    fun snooze(ctx: Context, key: String, dateStr: String) {
+    // "১৫/৩০ মিনিট পরে": নোটিফিকেশন ও widget লুকিয়ে যায়, ১৫ মিনিট পরে নোটিফিকেশন আবার আসে
+    fun snooze(ctx: Context, key: String, dateStr: String, min: Int = SNOOZE_MINUTES) {
         Store.ensureLoaded(ctx)
         if (Store.data.taken.contains("$dateStr|$key")) return
-        val at = System.currentTimeMillis() + SNOOZE_MINUTES * 60_000L
+        val at = System.currentTimeMillis() + min * 60_000L
         snzPrefs(ctx).edit().putString(key, "$dateStr|$at").apply()
         cancelNotif(ctx, key)
         cancelNag(ctx, key)
@@ -339,7 +341,8 @@ object Reminders {
             takeIntent.putExtra("date", dateStr)
             val takePi = PendingIntent.getBroadcast(ctx, ("T" + key).hashCode(), takeIntent, FLAGS)
             b.addAction(0, takenButtonLabel(meds), takePi)
-            b.addAction(0, snoozeLabel(), snoozePendingIntent(ctx, key, dateStr, "Z"))
+            b.addAction(0, snoozeLabel(SNOOZE_MINUTES), snoozePendingIntent(ctx, key, dateStr, "Z", SNOOZE_MINUTES))
+            b.addAction(0, snoozeLabel(SNOOZE_MINUTES_LONG), snoozePendingIntent(ctx, key, dateStr, "Z", SNOOZE_MINUTES_LONG))
         }
         notifyNow(ctx, notifId(key), b.build())
     }
