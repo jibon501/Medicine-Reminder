@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">ঔষধের রিমাইন্ডার</string>
+    <string name="widget_desc">ঔষধের সময় হলে এখানে ঔষধের তালিকা দেখাবে, অন্য সময় লুকানো থাকবে</string>
 </resources>

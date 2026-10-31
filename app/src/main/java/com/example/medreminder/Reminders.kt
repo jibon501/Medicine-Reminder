@@ -30,6 +30,9 @@ object Reminders {
 
     // খাবারের পরের ঔষধের নোটিফিকেশন খাবারের সময়ের এত মিনিট পরে আসে
     const val AFTER_LAG = 30
+
+    // "১৫ মিনিট পরে" বাটন চাপলে এত মিনিট পরে নোটিফিকেশন আবার আসে
+    const val SNOOZE_MINUTES = 15
     private const val FLAGS = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
 
     // ---------- helpers ----------
@@ -105,6 +108,8 @@ object Reminders {
     fun takenButtonLabel(meds: List<Medicine>): String =
         if (eatOnly(meds)) "✅ খেয়েছি" else "✅ নিয়েছি"
 
+    fun snoozeLabel(): String = "⏰ " + bn(SNOOZE_MINUTES) + " মিনিট পরে"
+
     // একটাই বাটন: খাওয়া হলে ওপরে "খাওয়া হয়েছে", নিচে "খাইনি" (বাটনে চাপলে আবার না-খাওয়া হয়ে যায়)
     fun doneTitle(meds: List<Medicine>): String =
         if (eatOnly(meds)) "✅ খাওয়া হয়েছে" else "✅ নেওয়া হয়েছে"
@@ -120,6 +125,86 @@ object Reminders {
         meds.mapIndexed { i, m ->
             bn(i + 1) + ". " + m.name + " — " + m.doseLabel()
         }
+
+    // ---------- হোম স্ক্রিন widget ও "১৫ মিনিট পরে" ----------
+
+    private const val SNZ = "widget_snooze"
+
+    private fun snzPrefs(ctx: Context) = ctx.getSharedPreferences(SNZ, Context.MODE_PRIVATE)
+
+    // এই স্লট কতক্ষণ পর্যন্ত পিছিয়ে রাখা (millis)। পিছানো না থাকলে 0
+    fun snoozedUntil(ctx: Context, key: String, dateStr: String): Long {
+        val v = snzPrefs(ctx).getString(key, null) ?: return 0L
+        val p = v.split("|")
+        if (p.size != 2 || p[0] != dateStr) return 0L
+        return p[1].toLongOrNull() ?: 0L
+    }
+
+    // widget-এ এখন যে স্লট দেখাতে হবে। নোটিফিকেশনের নিয়মেই: ক্রমে প্রথম না-খাওয়া স্লট,
+    // তার সময় হয়ে গেছে, আর ১৫ মিনিট পিছানো নেই। নইলে null (widget লুকানো)
+    fun widgetDueSlot(ctx: Context, now: LocalDateTime = LocalDateTime.now()): String? {
+        Store.ensureLoaded(ctx)
+        val d = Store.data
+        val date = now.toLocalDate()
+        val ds = date.toString()
+        val key = slotOrder.firstOrNull {
+            medsFor(d, it, date).isNotEmpty() && !d.taken.contains("$ds|$it")
+        } ?: return null
+        if (!isActive(d, key, date, now)) return null
+        if (snoozedUntil(ctx, key, ds) > System.currentTimeMillis()) return null
+        return key
+    }
+
+    private fun snoozePi(ctx: Context, key: String, date: String): PendingIntent {
+        val i = Intent(ctx, AlarmReceiver::class.java)
+        i.putExtra("key", key)
+        i.putExtra("nag", 0)
+        i.putExtra("date", date)
+        return PendingIntent.getBroadcast(ctx, ("S" + key).hashCode(), i, FLAGS)
+    }
+
+    fun snoozePendingIntent(ctx: Context, key: String, dateStr: String, code: String): PendingIntent {
+        val i = Intent(ctx, SnoozeReceiver::class.java)
+        i.putExtra("key", key)
+        i.putExtra("date", dateStr)
+        return PendingIntent.getBroadcast(ctx, (code + key).hashCode(), i, FLAGS)
+    }
+
+    private fun cancelSnooze(ctx: Context, key: String) {
+        snzPrefs(ctx).edit().remove(key).apply()
+        val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        am.cancel(snoozePi(ctx, key, ""))
+    }
+
+    // "১৫ মিনিট পরে": নোটিফিকেশন ও widget লুকিয়ে যায়, ১৫ মিনিট পরে নোটিফিকেশন আবার আসে
+    fun snooze(ctx: Context, key: String, dateStr: String) {
+        Store.ensureLoaded(ctx)
+        if (Store.data.taken.contains("$dateStr|$key")) return
+        val at = System.currentTimeMillis() + SNOOZE_MINUTES * 60_000L
+        snzPrefs(ctx).edit().putString(key, "$dateStr|$at").apply()
+        cancelNotif(ctx, key)
+        cancelNag(ctx, key)
+        setAlarm(ctx, at, snoozePi(ctx, key, dateStr))
+        MedWidget.updateAll(ctx)
+    }
+
+    // ফোন চালু হলে / অ্যাপ আপডেট হলে পিছানো নোটিফিকেশন আবার ঠিক করা
+    fun resumeSnoozes(ctx: Context) {
+        Store.ensureLoaded(ctx)
+        val p = snzPrefs(ctx)
+        val now = System.currentTimeMillis()
+        val today = LocalDate.now().toString()
+        for ((key, v) in p.all) {
+            val parts = (v as? String)?.split("|") ?: continue
+            val until = parts.getOrNull(1)?.toLongOrNull()
+            if (parts.size != 2 || until == null || parts[0] != today) {
+                p.edit().remove(key).apply()
+                continue
+            }
+            if (until > now) setAlarm(ctx, until, snoozePi(ctx, key, today)) else fire(ctx, key, today, 0)
+        }
+        MedWidget.updateAll(ctx)
+    }
 
     private fun notifId(key: String): Int = (key.hashCode() and 0x7fffffff) % 100000 + 10
 
@@ -187,6 +272,7 @@ object Reminders {
             val millis = at.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
             setAlarm(ctx, millis, alarmPi(ctx, key, 0, ""))
         }
+        MedWidget.updateAll(ctx)
     }
 
     fun cancelNag(ctx: Context, key: String) {
@@ -201,6 +287,8 @@ object Reminders {
     // ---------- firing ----------
 
     fun fire(ctx: Context, key: String, dateStr: String, nag: Int) {
+        // নোটিফিকেশন এলে "১৫ মিনিট পরে"-র পিছানো শেষ
+        cancelSnooze(ctx, key)
         val d = Store.data
         val date = LocalDate.parse(dateStr)
         if (d.taken.contains("$dateStr|$key")) return
@@ -251,6 +339,7 @@ object Reminders {
             takeIntent.putExtra("date", dateStr)
             val takePi = PendingIntent.getBroadcast(ctx, ("T" + key).hashCode(), takeIntent, FLAGS)
             b.addAction(0, takenButtonLabel(meds), takePi)
+            b.addAction(0, snoozeLabel(), snoozePendingIntent(ctx, key, dateStr, "Z"))
         }
         notifyNow(ctx, notifId(key), b.build())
     }
@@ -277,6 +366,8 @@ object Reminders {
         val evKey = "$dateStr|$key"
         if (before.taken.contains(evKey)) {
             cancelNotif(ctx, key)
+            cancelSnooze(ctx, key)
+            MedWidget.updateAll(ctx)
             return true
         }
         if (!canTake(before, key, dateStr)) return false
@@ -295,6 +386,7 @@ object Reminders {
 
         cancelNotif(ctx, key)
         cancelNag(ctx, key)
+        cancelSnooze(ctx, key)
 
         // ক্রমে পরের স্লট চালু হলো: তার নোটিফিকেশনের সময় হয়ে গিয়ে থাকলে এখনই নোটিফিকেশন,
         // নইলে নির্ধারিত সময়ে আসবে
