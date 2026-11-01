@@ -304,10 +304,10 @@ fun AppRoot() {
         lightColorScheme(primary = Color(0xFF00796B))
     }
 
-    // অ্যাপ খোলার সময় ৫ সেকেন্ড আয়াত দেখানো হয়
+    // অ্যাপ খোলার সময় ৩ সেকেন্ড আয়াত দেখানো হয়
     var splash by rememberSaveable { mutableStateOf(true) }
     LaunchedEffect(Unit) {
-        delay(5000)
+        delay(3000)
         splash = false
     }
 

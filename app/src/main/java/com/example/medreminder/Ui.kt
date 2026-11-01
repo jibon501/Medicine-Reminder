@@ -45,6 +45,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -174,10 +175,6 @@ fun TodayScreen() {
         modifier = Modifier.fillMaxSize().padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("আজকের ঔষধ", fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            Text(prettyDate(todayStr), fontSize = 13.sp)
-        }
         if (meals.isEmpty()) {
             Text("আজকের জন্য কোনো ঔষধ নেই। \"ঔষধ\" ট্যাবে গিয়ে ঔষধ যোগ করুন।")
         }
@@ -187,7 +184,7 @@ fun TodayScreen() {
             val nb = Reminders.medsFor(d, kb, today).size
             val na = Reminders.medsFor(d, ka, today).size
             val most = maxOf(nb, na)
-            val fs = if (most > 4) 11.sp else if (most > 2) 12.sp else 14.sp
+            val fs = if (most > 6) 10.sp else if (most > 4) 11.sp else if (most > 2) 12.sp else 14.sp
             Card(modifier = Modifier.fillMaxWidth().weight((most + 3).toFloat())) {
                 Column(Modifier.fillMaxSize().padding(8.dp)) {
                     // "🌅 সকাল ৮:০০" দুই ঘরের ঠিক মাঝখানে
@@ -209,6 +206,22 @@ fun TodayScreen() {
             }
         }
     }
+}
+
+// প্রতিটা ঔষধের আলাদা রং। ঔষধের তালিকায় যে ক্রমে আছে সেই ক্রম ধরে, তাই একই ঔষধের রং সবসময় এক
+private val MED_COLORS_LIGHT = listOf(
+    0xFF1565C0, 0xFFC62828, 0xFF2E7D32, 0xFF6A1B9A, 0xFFE65100, 0xFF00695C,
+    0xFFAD1457, 0xFF4E342E, 0xFF283593, 0xFF558B2F, 0xFF8D6E00, 0xFF00838F
+)
+private val MED_COLORS_DARK = listOf(
+    0xFF64B5F6, 0xFFFF8A80, 0xFF81C784, 0xFFBA68C8, 0xFFFFB74D, 0xFF4DB6AC,
+    0xFFF06292, 0xFFA1887F, 0xFF9FA8DA, 0xFFAED581, 0xFFFFD54F, 0xFF4DD0E1
+)
+
+private fun medColor(d: AppData, m: Medicine, dark: Boolean): Color {
+    val idx = d.medicines.indexOfFirst { it.id == m.id }.coerceAtLeast(0)
+    val list = if (dark) MED_COLORS_DARK else MED_COLORS_LIGHT
+    return Color(list[idx % list.size])
 }
 
 @Composable
@@ -243,14 +256,22 @@ private fun SlotPane(
         val meds = Reminders.medsFor(d, key, today)
         val blocked = Reminders.afterBlocked(d, key, todayStr)
 
-        // ঔষধ বেশি হলে শুধু এই অংশটা স্ক্রল হবে, বাটন নিচে স্থির থাকবে
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+        // স্ক্রল ছাড়া সব নাম দেখা যায়, প্রতিটা ঔষধের নিজস্ব রং। বাটন তালিকার ঠিক নিচেই
+        val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+        Column(Modifier.fillMaxWidth()) {
             // ১টি হলে পরিমাণ দেখানো হয় না, ১ এর বেশি হলে দেখায়
             meds.forEachIndexed { i, m ->
                 val line = bn(i + 1) + ". " + m.name + (if (m.dose > 1) " — " + m.doseLabel() else "")
-                Text(line, fontSize = fs, lineHeight = fs * 1.2f)
+                Text(
+                    line,
+                    fontSize = fs,
+                    lineHeight = fs * 1.2f,
+                    fontWeight = FontWeight.SemiBold,
+                    color = medColor(d, m, dark)
+                )
             }
         }
+        Spacer(Modifier.height(6.dp))
         if (blocked && !done) Text("আগের ঔষধ আগে নিন", fontSize = 10.sp, color = Color.Gray)
         // একটাই বাটন, একটাই লেখা: সবসময় শুরুতে ধূসর "❌ খাইনি"; খেয়ে চাপলে সবুজ "✔ খেয়েছি"; আবার চাপলে আগের অবস্থা
         val btnColor = if (done) Color(0xFF2E7D32) else Color(0xFF757575)

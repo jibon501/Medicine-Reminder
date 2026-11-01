@@ -11,7 +11,7 @@ import android.widget.RemoteViews
 import java.time.LocalDate
 
 // হোম স্ক্রিনের widget: ঔষধের নোটিফিকেশনের সময় না হলে খালি ও স্বচ্ছ (লুকানো) থাকে,
-// সময় হলে শুধু সেই বেলার ঔষধের তালিকা নিয়ে ভেসে ওঠে (কোনো বাটন নেই), চাপলে অ্যাপ খোলে
+// সময় হলে শুধু সেই বেলার ঔষধের তালিকা নিয়ে ভেসে ওঠে (কোনো বাটন নেই), চাপলে কিছুই হয় না
 class MedWidget : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
@@ -52,10 +52,6 @@ class MedWidget : AppWidgetProvider() {
                 rv.setTextViewText(R.id.w_title, "🔔 " + Slots.label(key))
                 rv.setTextViewText(R.id.w_lines, Reminders.numberedLines(meds).joinToString("\n"))
 
-                val open = PendingIntent.getActivity(
-                    ctx, 1, Intent(ctx, MainActivity::class.java), FLAGS
-                )
-                rv.setOnClickPendingIntent(R.id.w_card, open)
             }
             mgr.updateAppWidget(id, rv)
         }

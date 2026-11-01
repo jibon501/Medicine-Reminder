@@ -20,16 +20,23 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 
 object Reminders {
-    const val CHANNEL = "meds_alarm"
-    const val NAG_MINUTES = 5
-    // না খাওয়া পর্যন্ত প্রতি ৫ মিনিটে (সর্বোচ্চ ১২ ঘণ্টা)
-    const val NAG_MAX = 144
+    // নতুন চ্যানেল: লক স্ক্রিনে পুরো তালিকা দেখানোর সেটিং নিয়ে। পুরোনোটা মুছে ফেলা হয়
+    const val CHANNEL = "meds_alarm_v2"
+    const val OLD_CHANNEL = "meds_alarm"
+    // "🔇" চাপলে বাকি রিমাইন্ডার এই চ্যানেলে আসে: শব্দ ও কম্পন নেই
+    const val CHANNEL_SILENT = "meds_silent"
+    const val NAG_MINUTES = 10
+    // না খাওয়া পর্যন্ত প্রতি ১০ মিনিটে (সর্বোচ্চ ১২ ঘণ্টা)
+    const val NAG_MAX = 72
 
     // খাবারের আগের ঔষধের নোটিফিকেশন খাবারের সময়ের এত মিনিট আগে আসে
-    const val BEFORE_LEAD = 15
+    const val BEFORE_LEAD = 30
 
     // খাবারের পরের ঔষধের নোটিফিকেশন খাবারের সময়ের এত মিনিট পরে আসে
     const val AFTER_LAG = 30
+
+    // "২০ মিনিট পরে" বাটন চাপলে এত মিনিট পরে নোটিফিকেশন আবার আসে
+    const val SNOOZE_MINUTES = 20
     private const val FLAGS = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
 
     // ---------- helpers ----------
@@ -105,6 +112,8 @@ object Reminders {
     fun takenButtonLabel(meds: List<Medicine>): String =
         if (eatOnly(meds)) "✅ খেয়েছি" else "✅ নিয়েছি"
 
+    fun snoozeLabel(min: Int = SNOOZE_MINUTES): String = "⏰ " + bn(min) + " মিনিট পরে"
+
     // একটাই বাটন: খাওয়া হলে ওপরে "খাওয়া হয়েছে", নিচে "খাইনি" (বাটনে চাপলে আবার না-খাওয়া হয়ে যায়)
     fun doneTitle(meds: List<Medicine>): String =
         if (eatOnly(meds)) "✅ খাওয়া হয়েছে" else "✅ নেওয়া হয়েছে"
@@ -120,6 +129,122 @@ object Reminders {
         meds.mapIndexed { i, m ->
             bn(i + 1) + ". " + m.name + " — " + m.doseLabel()
         }
+
+    // ---------- "🔇" সাইলেন্ট: খাওয়া পর্যন্ত বাকি রিমাইন্ডার শব্দ ছাড়া আসে ----------
+
+    private const val SIL = "med_silent"
+
+    private fun silPrefs(ctx: Context) = ctx.getSharedPreferences(SIL, Context.MODE_PRIVATE)
+
+    fun isSilent(ctx: Context, key: String, dateStr: String): Boolean =
+        silPrefs(ctx).getString(key, null) == dateStr
+
+    private fun clearSilent(ctx: Context, key: String) {
+        silPrefs(ctx).edit().remove(key).apply()
+    }
+
+    fun silentPendingIntent(ctx: Context, key: String, dateStr: String): PendingIntent {
+        val i = Intent(ctx, SilentReceiver::class.java)
+        i.putExtra("key", key)
+        i.putExtra("date", dateStr)
+        return PendingIntent.getBroadcast(ctx, ("Q" + key).hashCode(), i, FLAGS)
+    }
+
+    fun silence(ctx: Context, key: String, dateStr: String) {
+        Store.ensureLoaded(ctx)
+        val d = Store.data
+        if (d.taken.contains("$dateStr|$key")) return
+        silPrefs(ctx).edit().putString(key, dateStr).apply()
+        val date = LocalDate.parse(dateStr)
+        val meds = medsDue(d, key, date)
+        if (meds.isEmpty()) return
+        val prev = prevSlot(d, key, date)
+        val blocked = prev != null && !d.taken.contains("$dateStr|$prev")
+        // চলতি আওয়াজ থামাতে নোটিফিকেশনটা সাইলেন্ট চ্যানেলে আবার বসানো হয়
+        cancelNotif(ctx, key)
+        showNotification(ctx, key, dateStr, meds, 0, blocked)
+    }
+
+    // ---------- হোম স্ক্রিন widget ও "২০ মিনিট পরে" ----------
+
+    private const val SNZ = "widget_snooze"
+
+    private fun snzPrefs(ctx: Context) = ctx.getSharedPreferences(SNZ, Context.MODE_PRIVATE)
+
+    // এই স্লট কতক্ষণ পর্যন্ত পিছিয়ে রাখা (millis)। পিছানো না থাকলে 0
+    fun snoozedUntil(ctx: Context, key: String, dateStr: String): Long {
+        val v = snzPrefs(ctx).getString(key, null) ?: return 0L
+        val p = v.split("|")
+        if (p.size != 2 || p[0] != dateStr) return 0L
+        return p[1].toLongOrNull() ?: 0L
+    }
+
+    // widget-এ এখন যে স্লট দেখাতে হবে। নোটিফিকেশনের নিয়মেই: ক্রমে প্রথম না-খাওয়া স্লট,
+    // তার সময় হয়ে গেছে, আর ১৫ মিনিট পিছানো নেই। নইলে null (widget লুকানো)
+    fun widgetDueSlot(ctx: Context, now: LocalDateTime = LocalDateTime.now()): String? {
+        Store.ensureLoaded(ctx)
+        val d = Store.data
+        val date = now.toLocalDate()
+        val ds = date.toString()
+        val key = slotOrder.firstOrNull {
+            medsFor(d, it, date).isNotEmpty() && !d.taken.contains("$ds|$it")
+        } ?: return null
+        if (!isActive(d, key, date, now)) return null
+        if (snoozedUntil(ctx, key, ds) > System.currentTimeMillis()) return null
+        return key
+    }
+
+    private fun snoozePi(ctx: Context, key: String, date: String): PendingIntent {
+        val i = Intent(ctx, AlarmReceiver::class.java)
+        i.putExtra("key", key)
+        i.putExtra("nag", 0)
+        i.putExtra("date", date)
+        return PendingIntent.getBroadcast(ctx, ("S" + key).hashCode(), i, FLAGS)
+    }
+
+    fun snoozePendingIntent(ctx: Context, key: String, dateStr: String, code: String, min: Int): PendingIntent {
+        val i = Intent(ctx, SnoozeReceiver::class.java)
+        i.putExtra("key", key)
+        i.putExtra("date", dateStr)
+        i.putExtra("min", min)
+        return PendingIntent.getBroadcast(ctx, (code + min + key).hashCode(), i, FLAGS)
+    }
+
+    private fun cancelSnooze(ctx: Context, key: String) {
+        snzPrefs(ctx).edit().remove(key).apply()
+        val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        am.cancel(snoozePi(ctx, key, ""))
+    }
+
+    // "২০ মিনিট পরে": নোটিফিকেশন লুকিয়ে যায়, ১৫ মিনিট পরে নোটিফিকেশন আবার আসে
+    fun snooze(ctx: Context, key: String, dateStr: String, min: Int = SNOOZE_MINUTES) {
+        Store.ensureLoaded(ctx)
+        if (Store.data.taken.contains("$dateStr|$key")) return
+        val at = System.currentTimeMillis() + min * 60_000L
+        snzPrefs(ctx).edit().putString(key, "$dateStr|$at").apply()
+        cancelNotif(ctx, key)
+        cancelNag(ctx, key)
+        setAlarm(ctx, at, snoozePi(ctx, key, dateStr))
+        MedWidget.updateAll(ctx)
+    }
+
+    // ফোন চালু হলে / অ্যাপ আপডেট হলে পিছানো নোটিফিকেশন আবার ঠিক করা
+    fun resumeSnoozes(ctx: Context) {
+        Store.ensureLoaded(ctx)
+        val p = snzPrefs(ctx)
+        val now = System.currentTimeMillis()
+        val today = LocalDate.now().toString()
+        for ((key, v) in p.all) {
+            val parts = (v as? String)?.split("|") ?: continue
+            val until = parts.getOrNull(1)?.toLongOrNull()
+            if (parts.size != 2 || until == null || parts[0] != today) {
+                p.edit().remove(key).apply()
+                continue
+            }
+            if (until > now) setAlarm(ctx, until, snoozePi(ctx, key, today)) else fire(ctx, key, today, 0)
+        }
+        MedWidget.updateAll(ctx)
+    }
 
     private fun notifId(key: String): Int = (key.hashCode() and 0x7fffffff) % 100000 + 10
 
@@ -162,16 +287,26 @@ object Reminders {
 
     fun ensureChannel(ctx: Context) {
         val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (nm.getNotificationChannel(CHANNEL) != null) return
-        val ch = NotificationChannel(CHANNEL, "ঔষধের রিমাইন্ডার", NotificationManager.IMPORTANCE_HIGH)
-        ch.enableVibration(true)
-        ch.vibrationPattern = longArrayOf(0, 500, 300, 500)
-        val attrs = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_ALARM)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .build()
-        ch.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM), attrs)
-        nm.createNotificationChannel(ch)
+        nm.deleteNotificationChannel(OLD_CHANNEL)
+        if (nm.getNotificationChannel(CHANNEL) == null) {
+            val ch = NotificationChannel(CHANNEL, "ঔষধের রিমাইন্ডার", NotificationManager.IMPORTANCE_HIGH)
+            ch.enableVibration(true)
+            ch.vibrationPattern = longArrayOf(0, 500, 300, 500)
+            ch.lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+            val attrs = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ALARM)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build()
+            ch.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM), attrs)
+            nm.createNotificationChannel(ch)
+        }
+        if (nm.getNotificationChannel(CHANNEL_SILENT) == null) {
+            val sc = NotificationChannel(CHANNEL_SILENT, "ঔষধের রিমাইন্ডার (সাইলেন্ট)", NotificationManager.IMPORTANCE_LOW)
+            sc.enableVibration(false)
+            sc.setSound(null, null)
+            sc.lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+            nm.createNotificationChannel(sc)
+        }
     }
 
     // ---------- scheduling ----------
@@ -187,6 +322,7 @@ object Reminders {
             val millis = at.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
             setAlarm(ctx, millis, alarmPi(ctx, key, 0, ""))
         }
+        MedWidget.updateAll(ctx)
     }
 
     fun cancelNag(ctx: Context, key: String) {
@@ -201,6 +337,8 @@ object Reminders {
     // ---------- firing ----------
 
     fun fire(ctx: Context, key: String, dateStr: String, nag: Int) {
+        // নোটিফিকেশন এলে "১৫ মিনিট পরে"-র পিছানো শেষ
+        cancelSnooze(ctx, key)
         val d = Store.data
         val date = LocalDate.parse(dateStr)
         if (d.taken.contains("$dateStr|$key")) return
@@ -236,8 +374,10 @@ object Reminders {
             lines.joinToString("\n")
         }
         val open = PendingIntent.getActivity(ctx, 0, Intent(ctx, MainActivity::class.java), FLAGS)
-        val b = NotificationCompat.Builder(ctx, CHANNEL)
+        val silent = isSilent(ctx, key, dateStr)
+        val b = NotificationCompat.Builder(ctx, if (silent) CHANNEL_SILENT else CHANNEL)
             .setSmallIcon(R.drawable.ic_pill)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setContentTitle(if (nag > 0) "$title (আবার মনে করিয়ে দিচ্ছি)" else title)
             .setContentText(lines.joinToString("  "))
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
@@ -251,6 +391,8 @@ object Reminders {
             takeIntent.putExtra("date", dateStr)
             val takePi = PendingIntent.getBroadcast(ctx, ("T" + key).hashCode(), takeIntent, FLAGS)
             b.addAction(0, takenButtonLabel(meds), takePi)
+            b.addAction(0, snoozeLabel(SNOOZE_MINUTES), snoozePendingIntent(ctx, key, dateStr, "Z", SNOOZE_MINUTES))
+            if (!silent) b.addAction(0, "🔇", silentPendingIntent(ctx, key, dateStr))
         }
         notifyNow(ctx, notifId(key), b.build())
     }
@@ -277,6 +419,9 @@ object Reminders {
         val evKey = "$dateStr|$key"
         if (before.taken.contains(evKey)) {
             cancelNotif(ctx, key)
+            cancelSnooze(ctx, key)
+            clearSilent(ctx, key)
+            MedWidget.updateAll(ctx)
             return true
         }
         if (!canTake(before, key, dateStr)) return false
@@ -295,6 +440,8 @@ object Reminders {
 
         cancelNotif(ctx, key)
         cancelNag(ctx, key)
+        cancelSnooze(ctx, key)
+        clearSilent(ctx, key)
 
         // ক্রমে পরের স্লট চালু হলো: তার নোটিফিকেশনের সময় হয়ে গিয়ে থাকলে এখনই নোটিফিকেশন,
         // নইলে নির্ধারিত সময়ে আসবে
