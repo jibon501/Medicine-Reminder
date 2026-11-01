@@ -171,42 +171,48 @@ fun TodayScreen() {
         d.taken.contains("$todayStr|$key") || Reminders.medsDue(d, key, today).isNotEmpty()
     val meals = Slots.meals.filter { visible(it + "_BEFORE") || visible(it + "_AFTER") }
 
-    Column(
-        modifier = Modifier.fillMaxSize().padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().padding(12.dp)) {
         if (meals.isEmpty()) {
             Text("আজকের জন্য কোনো ঔষধ নেই। \"ঔষধ\" ট্যাবে গিয়ে ঔষধ যোগ করুন।")
-        }
-        meals.forEach { meal ->
-            val kb = meal + "_BEFORE"
-            val ka = meal + "_AFTER"
-            val nb = Reminders.medsFor(d, kb, today).size
-            val na = Reminders.medsFor(d, ka, today).size
-            val most = maxOf(nb, na)
-            val fs = if (most > 6) 10.sp else if (most > 4) 11.sp else if (most > 2) 12.sp else 14.sp
-            Card(modifier = Modifier.fillMaxWidth().weight((most + 3).toFloat())) {
-                Column(Modifier.fillMaxSize().padding(8.dp)) {
-                    // "🌅 সকাল ৮:০০" দুই ঘরের ঠিক মাঝখানে
-                    Text(
-                        (MEAL_EMOJI[meal] ?: "") + " " + pretty(Slots.mealTime(d, meal)),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Row(Modifier.fillMaxSize().padding(top = 4.dp)) {
-                        SlotPane(kb, "খাবারের আগে", visible(kb), d, today, now, fs, false, Modifier.weight(1f).fillMaxSize())
-                        Box(Modifier.width(17.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
-                            Box(Modifier.width(1.dp).fillMaxHeight().background(Color.Gray.copy(alpha = 0.4f)))
-                        }
-                        SlotPane(ka, "খাবারের পরে", visible(ka), d, today, now, fs, true, Modifier.weight(1f).fillMaxSize())
-                    }
+        } else {
+            // ঘরগুলো মিলে পুরো স্ক্রিন ভরে। যে ঘরে ঔষধ বেশি সেটা বড়, কম থাকলে ছোট।
+            // ঔষধের তালিকা স্ক্রল হয় না: সব ঢোকাতে দরকার হলে লেখা ছোট হয়
+            val gap = 8f
+            val totalH = maxHeight.value - gap * (meals.size - 1)
+            val paneW = (maxWidth.value - 16f - 17f) / 2f
+            val rows = meals.map {
+                Triple(it, Reminders.medsFor(d, it + "_BEFORE", today), Reminders.medsFor(d, it + "_AFTER", today))
+            }
+            fun lineCount(meds: List<Medicine>, fs: Float): Int =
+                meds.withIndex().sumOf { (i, m) -> estLines(medLine(i, m), fs, paneW) }
+            fun need(r: Triple<String, List<Medicine>, List<Medicine>>, fs: Float): Float {
+                val lines = maxOf(lineCount(r.second, fs), lineCount(r.third, fs), 1)
+                return 104f + lines * fs * 1.25f
+            }
+            val sizes = listOf(14f, 13f, 12f, 11f, 10f, 9f)
+            val fsF = sizes.firstOrNull { f -> rows.sumOf { need(it, f).toDouble() } <= totalH } ?: 9f
+            val needs = rows.map { need(it, fsF) }
+            val extra = maxOf(0f, (totalH - needs.sum()) / rows.size)
+
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(gap.dp)
+            ) {
+                rows.forEachIndexed { idx, r ->
+                    MealCard(r.first, d, today, fsF, Modifier.fillMaxWidth().weight(needs[idx] + extra))
                 }
             }
         }
     }
 }
+
+// একটা ঔষধের লাইনে কতগুলো লাইন লাগবে তার আনুমানিক হিসাব (ঘরের উচ্চতা ঠিক করতে)
+private fun estLines(text: String, fs: Float, paneW: Float): Int =
+    maxOf(1, kotlin.math.ceil(text.length * 0.62f * fs / paneW).toInt())
+
+// ১টি হলে পরিমাণ দেখানো হয় না, ১ এর বেশি হলে দেখায়
+private fun medLine(i: Int, m: Medicine): String =
+    bn(i + 1) + ". " + m.name + (if (m.dose > 1) " — " + m.doseLabel() else "")
 
 // প্রতিটা ঔষধের আলাদা রং। ঔষধের তালিকায় যে ক্রমে আছে সেই ক্রম ধরে, তাই একই ঔষধের রং সবসময় এক
 private val MED_COLORS_LIGHT = listOf(
@@ -225,18 +231,50 @@ private fun medColor(d: AppData, m: Medicine, dark: Boolean): Color {
 }
 
 @Composable
-private fun SlotPane(
+private fun MealCard(meal: String, d: AppData, today: LocalDate, fs: Float, modifier: Modifier) {
+    val todayStr = today.toString()
+    val kb = meal + "_BEFORE"
+    val ka = meal + "_AFTER"
+    fun visible(key: String) =
+        d.taken.contains("$todayStr|$key") || Reminders.medsDue(d, key, today).isNotEmpty()
+    Card(modifier = modifier) {
+        Column(Modifier.fillMaxSize().padding(8.dp)) {
+            // "🌅 সকাল ৮:০০" দুই ঘরের ঠিক মাঝখানে
+            Text(
+                (MEAL_EMOJI[meal] ?: "") + " " + pretty(Slots.mealTime(d, meal)),
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+            // ঔষধের তালিকা, স্ক্রল ছাড়া
+            Row(Modifier.weight(1f).fillMaxWidth().padding(top = 4.dp)) {
+                SlotList(kb, "খাবারের আগে", visible(kb), d, today, fs.sp, Modifier.weight(1f).fillMaxHeight())
+                Box(Modifier.width(17.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                    Box(Modifier.width(1.dp).fillMaxHeight().background(Color.Gray.copy(alpha = 0.4f)))
+                }
+                SlotList(ka, "খাবারের পরে", visible(ka), d, today, fs.sp, Modifier.weight(1f).fillMaxHeight())
+            }
+            // খেয়েছি/খাইনি বাটন দুটো তালিকার নিচে একই লাইনে
+            Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                Box(Modifier.weight(1f)) { if (visible(kb)) SlotButton(kb, d, today) }
+                Spacer(Modifier.width(17.dp))
+                Box(Modifier.weight(1f)) { if (visible(ka)) SlotButton(ka, d, today) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SlotList(
     key: String,
     title: String,
     show: Boolean,
     d: AppData,
     today: LocalDate,
-    now: LocalDateTime,
     fs: androidx.compose.ui.unit.TextUnit,
-    titleEnd: Boolean,
     modifier: Modifier
 ) {
-    val ctx = LocalContext.current
     val todayStr = today.toString()
     Column(modifier) {
         // "খাবারের আগে/পরে" নিজের ঘরের মাঝখানে
@@ -255,41 +293,42 @@ private fun SlotPane(
         val done = d.taken.contains("$todayStr|$key")
         val meds = Reminders.medsFor(d, key, today)
         val blocked = Reminders.afterBlocked(d, key, todayStr)
-
-        // স্ক্রল ছাড়া সব নাম দেখা যায়, প্রতিটা ঔষধের নিজস্ব রং। বাটন তালিকার ঠিক নিচেই
         val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
-        Column(Modifier.fillMaxWidth()) {
-            // ১টি হলে পরিমাণ দেখানো হয় না, ১ এর বেশি হলে দেখায়
-            meds.forEachIndexed { i, m ->
-                val line = bn(i + 1) + ". " + m.name + (if (m.dose > 1) " — " + m.doseLabel() else "")
-                Text(
-                    line,
-                    fontSize = fs,
-                    lineHeight = fs * 1.2f,
-                    fontWeight = FontWeight.SemiBold,
-                    color = medColor(d, m, dark)
-                )
-            }
-        }
-        Spacer(Modifier.height(6.dp))
-        if (blocked && !done) Text("আগের ঔষধ আগে নিন", fontSize = 10.sp, color = Color.Gray)
-        // একটাই বাটন, একটাই লেখা: সবসময় শুরুতে ধূসর "❌ খাইনি"; খেয়ে চাপলে সবুজ "✔ খেয়েছি"; আবার চাপলে আগের অবস্থা
-        val btnColor = if (done) Color(0xFF2E7D32) else Color(0xFF757575)
-        Button(
-            onClick = {
-                if (done) Reminders.unmarkTaken(ctx, key, todayStr)
-                else if (!Reminders.markTaken(ctx, key, todayStr)) toast(ctx, "আগের ঔষধ আগে নিন")
-            },
-            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = btnColor, contentColor = Color.White),
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-            modifier = Modifier.fillMaxWidth().height(34.dp)
-        ) {
+        meds.forEachIndexed { i, m ->
             Text(
-                if (done) Reminders.yesLabel(meds) else Reminders.noLabel(meds),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold
+                medLine(i, m),
+                fontSize = fs,
+                lineHeight = fs * 1.2f,
+                fontWeight = FontWeight.SemiBold,
+                color = medColor(d, m, dark)
             )
         }
+        if (blocked && !done) Text("আগের ঔষধ আগে নিন", fontSize = 10.sp, color = Color.Gray)
+    }
+}
+
+@Composable
+private fun SlotButton(key: String, d: AppData, today: LocalDate) {
+    val ctx = LocalContext.current
+    val todayStr = today.toString()
+    val done = d.taken.contains("$todayStr|$key")
+    val meds = Reminders.medsFor(d, key, today)
+    // একটাই বাটন, একটাই লেখা: সবসময় শুরুতে ধূসর "❌ খাইনি"; খেয়ে চাপলে সবুজ "✔ খেয়েছি"; আবার চাপলে আগের অবস্থা
+    val btnColor = if (done) Color(0xFF2E7D32) else Color(0xFF757575)
+    Button(
+        onClick = {
+            if (done) Reminders.unmarkTaken(ctx, key, todayStr)
+            else if (!Reminders.markTaken(ctx, key, todayStr)) toast(ctx, "আগের ঔষধ আগে নিন")
+        },
+        colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = btnColor, contentColor = Color.White),
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+        modifier = Modifier.fillMaxWidth().height(34.dp)
+    ) {
+        Text(
+            if (done) Reminders.yesLabel(meds) else Reminders.noLabel(meds),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 
