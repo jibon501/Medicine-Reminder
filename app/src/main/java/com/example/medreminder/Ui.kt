@@ -179,7 +179,7 @@ fun TodayScreen() {
             // ঔষধের তালিকা স্ক্রল হয় না: সব ঢোকাতে দরকার হলে লেখা ছোট হয়
             val gap = 8f
             val totalH = maxHeight.value - gap * (meals.size - 1)
-            val paneW = (maxWidth.value - 16f - 17f) / 2f
+            val paneW = (maxWidth.value - 16f - 8f) / 2f - 12f
             val rows = meals.map {
                 Triple(it, Reminders.medsFor(d, it + "_BEFORE", today), Reminders.medsFor(d, it + "_AFTER", today))
             }
@@ -239,26 +239,40 @@ private fun MealCard(meal: String, d: AppData, today: LocalDate, fs: Float, modi
         d.taken.contains("$todayStr|$key") || Reminders.medsDue(d, key, today).isNotEmpty()
     Card(modifier = modifier) {
         Column(Modifier.fillMaxSize().padding(8.dp)) {
-            // "🌅 সকাল ৮:০০" দুই ঘরের ঠিক মাঝখানে
-            Text(
-                (MEAL_EMOJI[meal] ?: "") + " " + pretty(Slots.mealTime(d, meal)),
-                fontWeight = FontWeight.Bold,
-                fontSize = 15.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
+            // সময়ের দুই পাশে শুধু "আগে" আর "পরে"
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "আগে",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f).padding(start = 6.dp)
+                )
+                Text(
+                    (MEAL_EMOJI[meal] ?: "") + " " + pretty(Slots.mealTime(d, meal)),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    "পরে",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.weight(1f).padding(end = 6.dp)
+                )
+            }
             // ঔষধের তালিকা, স্ক্রল ছাড়া
             Row(Modifier.weight(1f).fillMaxWidth().padding(top = 4.dp)) {
-                SlotList(kb, "খাবারের আগে", visible(kb), d, today, fs.sp, Modifier.weight(1f).fillMaxHeight())
-                Box(Modifier.width(17.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
-                    Box(Modifier.width(1.dp).fillMaxHeight().background(Color.Gray.copy(alpha = 0.4f)))
-                }
-                SlotList(ka, "খাবারের পরে", visible(ka), d, today, fs.sp, Modifier.weight(1f).fillMaxHeight())
+                SlotList(kb, visible(kb), d, today, fs.sp, Modifier.weight(1f).fillMaxHeight())
+                Spacer(Modifier.width(8.dp))
+                SlotList(ka, visible(ka), d, today, fs.sp, Modifier.weight(1f).fillMaxHeight())
             }
             // খেয়েছি/খাইনি বাটন দুটো তালিকার নিচে একই লাইনে
             Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
                 Box(Modifier.weight(1f)) { if (visible(kb)) SlotButton(kb, d, today) }
-                Spacer(Modifier.width(17.dp))
+                Spacer(Modifier.width(8.dp))
                 Box(Modifier.weight(1f)) { if (visible(ka)) SlotButton(ka, d, today) }
             }
         }
@@ -268,7 +282,6 @@ private fun MealCard(meal: String, d: AppData, today: LocalDate, fs: Float, modi
 @Composable
 private fun SlotList(
     key: String,
-    title: String,
     show: Boolean,
     d: AppData,
     today: LocalDate,
@@ -276,16 +289,16 @@ private fun SlotList(
     modifier: Modifier
 ) {
     val todayStr = today.toString()
-    Column(modifier) {
-        // "খাবারের আগে/পরে" নিজের ঘরের মাঝখানে
-        Text(
-            title,
-            fontWeight = FontWeight.Bold,
-            fontSize = fs,
-            color = MaterialTheme.colorScheme.primary,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    // প্রতিটা তালিকা নিজের হালকা ব্যাকগ্রাউন্ডের বক্সে
+    Column(
+        modifier
+            .background(
+                if (isDark) Color.White.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.6f),
+                androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+            )
+            .padding(6.dp)
+    ) {
         if (!show) {
             Text("— নেই —", fontSize = fs, color = Color.Gray)
             return@Column

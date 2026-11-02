@@ -391,7 +391,6 @@ object Reminders {
             takeIntent.putExtra("date", dateStr)
             val takePi = PendingIntent.getBroadcast(ctx, ("T" + key).hashCode(), takeIntent, FLAGS)
             b.addAction(0, takenButtonLabel(meds), takePi)
-            b.addAction(0, snoozeLabel(SNOOZE_MINUTES), snoozePendingIntent(ctx, key, dateStr, "Z", SNOOZE_MINUTES))
             if (!silent) b.addAction(0, "🔇", silentPendingIntent(ctx, key, dateStr))
         }
         notifyNow(ctx, notifId(key), b.build())
