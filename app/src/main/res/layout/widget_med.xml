@@ -18,6 +18,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:ellipsize="end"
+            android:gravity="center_horizontal"
             android:maxLines="1"
             android:textColor="#00796B"
             android:textSize="15sp"
@@ -30,6 +31,7 @@
             android:layout_marginTop="4dp"
             android:layout_weight="1"
             android:ellipsize="end"
+            android:gravity="center_horizontal"
             android:maxLines="8"
             android:textColor="#212121"
             android:textSize="14sp" />
