@@ -112,6 +112,19 @@ fun Medicine.totalFor(days: Int): String = bn(totalNeededFor(days)) + " " + Form
 
 fun Medicine.doseLabel(): String = bn(dose) + " " + Forms.of(form).unit
 
+// নোটিফিকেশন, widget ও আজ ট্যাবে পাওয়ার ছাড়া শুধু নাম দেখানোর জন্য ("REMMO 20 mg" -> "REMMO")
+// জমানো নাম বদলায় না, শুধু দেখানোর সময় পাওয়ার অংশ (20 mg, 100 mg+200 mcg, 500/65 mg ...) বাদ যায়
+private val POWER_REGEX = Regex(
+    "\\s*\\d+(?:[.,]\\d+)?(?:\\s*[+/]\\s*\\d+(?:[.,]\\d+)?)*\\s*(?:mcg|mg|gm|g|ml|iu|ug|µg|%)(?![A-Za-z])" +
+        "(?:\\s*[+/]\\s*\\d+(?:[.,]\\d+)?\\s*(?:(?:mcg|mg|gm|g|ml|iu|ug|µg|%)(?![A-Za-z]))?)*",
+    RegexOption.IGNORE_CASE
+)
+
+fun Medicine.shortName(): String {
+    val s = name.replace(POWER_REGEX, "").trim().trimEnd('-', '+', '/', ',', ' ')
+    return if (s.isBlank()) name else s
+}
+
 fun Medicine.totalLabel(): String = bn(totalNeeded()) + " " + Forms.of(form).unit
 
 data class Disease(

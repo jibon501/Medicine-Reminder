@@ -212,7 +212,7 @@ private fun estLines(text: String, fs: Float, paneW: Float): Int =
 
 // ১টি হলে পরিমাণ দেখানো হয় না, ১ এর বেশি হলে দেখায়
 private fun medLine(i: Int, m: Medicine): String =
-    bn(i + 1) + ". " + m.name + (if (m.dose > 1) " — " + m.doseLabel() else "")
+    bn(i + 1) + ". " + m.shortName() + (if (m.dose > 1) " — " + m.doseLabel() else "")
 
 // প্রতিটা ঔষধের আলাদা রং। ঔষধের তালিকায় যে ক্রমে আছে সেই ক্রম ধরে, তাই একই ঔষধের রং সবসময় এক
 private val MED_COLORS_LIGHT = listOf(

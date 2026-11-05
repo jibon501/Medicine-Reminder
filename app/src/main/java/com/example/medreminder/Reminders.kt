@@ -21,8 +21,9 @@ import java.time.ZoneId
 
 object Reminders {
     // নতুন চ্যানেল: লক স্ক্রিনে পুরো তালিকা দেখানোর সেটিং নিয়ে। পুরোনোটা মুছে ফেলা হয়
-    const val CHANNEL = "meds_alarm_v2"
+    const val CHANNEL = "meds_alarm_v3"
     const val OLD_CHANNEL = "meds_alarm"
+    const val OLD_CHANNEL_V2 = "meds_alarm_v2"
     // "🔇" চাপলে বাকি রিমাইন্ডার এই চ্যানেলে আসে: শব্দ ও কম্পন নেই
     const val CHANNEL_SILENT = "meds_silent"
     const val NAG_MINUTES = 10
@@ -127,7 +128,7 @@ object Reminders {
 
     fun numberedLines(meds: List<Medicine>): List<String> =
         meds.mapIndexed { i, m ->
-            bn(i + 1) + ". " + m.name + " — " + m.doseLabel()
+            bn(i + 1) + ". " + m.shortName() + " — " + m.doseLabel()
         }
 
     // ---------- "🔇" সাইলেন্ট: খাওয়া পর্যন্ত বাকি রিমাইন্ডার শব্দ ছাড়া আসে ----------
@@ -288,6 +289,7 @@ object Reminders {
     fun ensureChannel(ctx: Context) {
         val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.deleteNotificationChannel(OLD_CHANNEL)
+        nm.deleteNotificationChannel(OLD_CHANNEL_V2)
         if (nm.getNotificationChannel(CHANNEL) == null) {
             val ch = NotificationChannel(CHANNEL, "ঔষধের রিমাইন্ডার", NotificationManager.IMPORTANCE_HIGH)
             ch.enableVibration(true)
@@ -297,7 +299,9 @@ object Reminders {
                 .setUsage(AudioAttributes.USAGE_ALARM)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build()
-            ch.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM), attrs)
+            // নোটিফিকেশনের নিজস্ব সাউন্ড: res/raw/notifi.mp3
+            val soundUri = android.net.Uri.parse("android.resource://" + ctx.packageName + "/" + R.raw.notifi)
+            ch.setSound(soundUri, attrs)
             nm.createNotificationChannel(ch)
         }
         if (nm.getNotificationChannel(CHANNEL_SILENT) == null) {
@@ -391,7 +395,11 @@ object Reminders {
             takeIntent.putExtra("date", dateStr)
             val takePi = PendingIntent.getBroadcast(ctx, ("T" + key).hashCode(), takeIntent, FLAGS)
             b.addAction(0, takenButtonLabel(meds), takePi)
-            if (!silent) b.addAction(0, "🔇", silentPendingIntent(ctx, key, dateStr))
+            // সবচেয়ে ডানে সাইলেন্ট
+            if (!silent) b.addAction(0, "🔇 Silent", silentPendingIntent(ctx, key, dateStr))
+            // স্লাইড করে সরানো যাবে না, শুধু "খেয়েছি" চাপলে যাবে। কখনো আটকে না থাকতে ১২ ঘণ্টা পর নিজে সরে যায়
+            b.setOngoing(true)
+            b.setTimeoutAfter(12L * 60 * 60 * 1000)
         }
         notifyNow(ctx, notifId(key), b.build())
     }
